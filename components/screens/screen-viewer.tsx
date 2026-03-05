@@ -1,0 +1,80 @@
+"use client";
+import { useImageViewer } from "@/hooks/use-image-viewer";
+import { AnnotationLayer } from "./annotation-layer";
+import { AnnotationLegend } from "./annotation-legend";
+import { Button } from "@/components/ui/button";
+import { ZoomIn, ZoomOut, RotateCcw, MapPin } from "lucide-react";
+import { useUIStore } from "@/stores/ui-store";
+import { cn } from "@/lib/utils";
+import type { Screen } from "@/types";
+
+interface Props {
+  screen: Screen;
+}
+
+export function ScreenViewer({ screen }: Props) {
+  const { scale, offset, isDragging, onWheel, onMouseDown, onMouseMove, onMouseUp, reset } =
+    useImageViewer();
+  const isAnnotating = useUIStore((s) => s.isAnnotating);
+  const setIsAnnotating = useUIStore((s) => s.setIsAnnotating);
+
+  return (
+    <div className="flex gap-4 h-full">
+      {/* Viewer */}
+      <div className="flex-1 flex flex-col gap-2">
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant={isAnnotating ? "default" : "outline"}
+            onClick={() => setIsAnnotating(!isAnnotating)}
+            className="gap-1.5"
+          >
+            <MapPin className="h-3.5 w-3.5" />
+            {isAnnotating ? "Annotating" : "Annotate"}
+          </Button>
+          <div className="flex-1" />
+          <Button size="icon" variant="ghost" onClick={reset}>
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+          <span className="text-xs text-muted-foreground w-10 text-center">
+            {Math.round(scale * 100)}%
+          </span>
+        </div>
+
+        <div
+          className="relative flex-1 overflow-hidden rounded-lg border bg-checkerboard"
+          onWheel={onWheel}
+          onMouseDown={!isAnnotating ? onMouseDown : undefined}
+          onMouseMove={!isAnnotating ? onMouseMove : undefined}
+          onMouseUp={!isAnnotating ? onMouseUp : undefined}
+          style={{ cursor: isDragging ? "grabbing" : isAnnotating ? "crosshair" : scale > 1 ? "grab" : "default" }}
+        >
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{
+              transform: `scale(${scale}) translate(${offset.x / scale}px, ${offset.y / scale}px)`,
+              transformOrigin: "center",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={screen.dataUrl}
+              alt={screen.name}
+              className="max-w-full max-h-full object-contain select-none"
+              draggable={false}
+            />
+            <AnnotationLayer screenId={screen.id} scale={scale} />
+          </div>
+        </div>
+      </div>
+
+      {/* Legend sidebar */}
+      <div className="w-64 shrink-0 space-y-2">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Annotations
+        </p>
+        <AnnotationLegend screenId={screen.id} />
+      </div>
+    </div>
+  );
+}
