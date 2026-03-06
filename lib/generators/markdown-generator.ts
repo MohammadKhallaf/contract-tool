@@ -1,45 +1,50 @@
 import type { Contract } from "@/types";
 import { getLinkedScreenNames, buildScreenEndpointMap } from "@/lib/utils/screen-links";
 
+function schemaFence(schema: string | undefined): string {
+  const body = schema?.trim() || "{}";
+  return `\`\`\`jsonc\n${body}\n\`\`\``;
+}
+
 export function generateMarkdown(contract: Contract): string {
   const sections: string[] = [];
 
-  sections.push(`# API Contract: ${contract.name}`);
-  sections.push(`> Generated: ${new Date(contract.updatedAt).toLocaleString()}`);
+  const enabledEndpoints = contract.endpoints.filter((ep) => ep.enabled);
+  const storyKeys = contract.jiraStories
+    .map((s) => s.key)
+    .filter(Boolean);
+  const generatedAt = new Date(contract.updatedAt).toISOString();
+
+  // Frontmatter
+  sections.push("---");
+  sections.push(`title: ${contract.name}`);
+  sections.push(`generatedAt: ${generatedAt}`);
+  sections.push(`storyKeys: [${storyKeys.map((k) => `"${k}"`).join(", ")}]`);
+  sections.push(`endpointCount: ${enabledEndpoints.length}`);
+  sections.push("---");
   sections.push("");
 
-  // JIRA Stories
-  if (contract.jiraStories.length > 0) {
-    sections.push("## JIRA Stories");
+  // H1 + stories line
+  sections.push(`# API Contract: ${contract.name}`);
+  sections.push("");
+  if (storyKeys.length > 0) {
+    sections.push(`**Stories:** ${storyKeys.join(", ")}`);
     sections.push("");
-    contract.jiraStories.forEach((story, idx) => {
-      const heading = story.key
-        ? `### Story ${idx + 1}: ${story.key} — ${story.title}`
-        : `### Story ${idx + 1}: ${story.title}`;
-      sections.push(heading);
-      if (story.storyPoints !== undefined)
-        sections.push(`**Story Points:** ${story.storyPoints}`);
-      if (story.priority) sections.push(`**Priority:** ${story.priority}`);
-      if (story.labels.length > 0)
-        sections.push(`**Labels:** ${story.labels.join(", ")}`);
-      if (story.description) {
-        sections.push("", "**Description:**", story.description);
-      }
-      if (story.acceptanceCriteria.length > 0) {
-        sections.push("", "**Acceptance Criteria:**");
-        story.acceptanceCriteria.forEach((ac, i) => {
-          sections.push(`${i + 1}. ${ac.text}`);
-        });
-      }
-      sections.push("");
-    });
   }
 
-  // Endpoints table
-  const enabledEndpoints = contract.endpoints.filter((ep) => ep.enabled);
+  // Table of Contents
+  sections.push("## Table of Contents");
+  sections.push("- [Endpoints](#endpoints)");
+  sections.push("- [Endpoint Details](#endpoint-details)");
+  sections.push("- [Types & Validation](#types--validation)");
+  sections.push("- [Screen Annotations](#screen-annotations)");
+  sections.push("- [Page → Endpoint Map](#page--endpoint-map)");
+  sections.push("");
+
+  // Endpoints summary table
+  sections.push("## Endpoints");
+  sections.push("");
   if (enabledEndpoints.length > 0) {
-    sections.push("## Endpoints");
-    sections.push("");
     sections.push("| Method | Path | Description | Confidence |");
     sections.push("|--------|------|-------------|------------|");
     for (const ep of enabledEndpoints) {
@@ -48,108 +53,162 @@ export function generateMarkdown(contract: Contract): string {
         `| \`${ep.method}\` | \`${ep.path}\` | ${ep.description} | ${conf} |`
       );
     }
+  } else {
+    sections.push("_No endpoints._");
+  }
+  sections.push("");
+
+  // Endpoint Details
+  sections.push("## Endpoint Details");
+  sections.push("");
+  for (const ep of enabledEndpoints) {
+    sections.push(`### \`${ep.method} ${ep.path}\``);
+    sections.push("");
+    sections.push(`> ${ep.description}`);
     sections.push("");
 
-    // Endpoint details
-    sections.push("## Endpoint Details");
-    for (const ep of enabledEndpoints) {
-      sections.push(`### \`${ep.method} ${ep.path}\``);
-      sections.push(ep.description);
+    // Headers
+    if (ep.headers.length > 0) {
+      sections.push("**Headers:**");
+      sections.push("| Name | Value | Required |");
+      sections.push("|------|-------|----------|");
+      ep.headers.forEach((h) => {
+        sections.push(
+          `| ${h.name} | ${h.value} | ${h.required ? "Yes" : "No"} |`
+        );
+      });
+    } else {
+      sections.push("**Headers:** None");
+    }
+    sections.push("");
+
+    // Path Parameters
+    if (ep.pathParams.length > 0) {
+      sections.push("**Path Parameters:**");
+      sections.push("| Name | Type | Required | Description |");
+      sections.push("|------|------|----------|-------------|");
+      ep.pathParams.forEach((p) => {
+        sections.push(
+          `| \`${p.name}\` | ${p.type} | ${p.required ? "Yes" : "No"} | ${p.description ?? ""} |`
+        );
+      });
+    } else {
+      sections.push("**Path Parameters:** None");
+    }
+    sections.push("");
+
+    // Query Parameters
+    if (ep.queryParams.length > 0) {
+      sections.push("**Query Parameters:**");
+      sections.push("| Name | Type | Required | Description |");
+      sections.push("|------|------|----------|-------------|");
+      ep.queryParams.forEach((p) => {
+        sections.push(
+          `| \`${p.name}\` | ${p.type} | ${p.required ? "Yes" : "No"} | ${p.description ?? ""} |`
+        );
+      });
+    } else {
+      sections.push("**Query Parameters:** None");
+    }
+    sections.push("");
+
+    // Request Body
+    if (ep.requestBody) {
+      sections.push(`**Request Body:** \`${ep.requestBody.contentType}\``);
+      sections.push(schemaFence(ep.requestBody.schema));
+    } else {
+      sections.push("**Request Body:** None");
+    }
+    sections.push("");
+
+    // Response
+    if (ep.responseBody) {
+      sections.push(`**Response:** \`${ep.responseBody.statusCode}\``);
+      sections.push(schemaFence(ep.responseBody.schema));
+      if (ep.responseBody.isPaginated) {
+        sections.push("");
+        sections.push("_Paginated:_ Yes");
+      }
+    } else {
+      sections.push("**Response:** None");
+    }
+    sections.push("");
+
+    // Used on Pages
+    const pageNames = getLinkedScreenNames(ep, contract.annotations, contract.screens);
+    if (pageNames.length > 0) {
+      sections.push(`**Used on Pages:** ${pageNames.join(", ")}`);
+    } else {
+      sections.push("**Used on Pages:** None");
+    }
+    sections.push("");
+
+    // Notes
+    if (ep.notes) {
+      sections.push(`**Notes:** ${ep.notes}`);
+    } else {
+      sections.push("**Notes:** None");
+    }
+    sections.push("");
+
+    sections.push("---");
+    sections.push("");
+  }
+
+  // Types & Validation (paired interface + yup schema)
+  sections.push("## Types & Validation");
+  sections.push("");
+  if (contract.generatedTypes.length > 0 || contract.generatedSchemas.length > 0) {
+    const pairedSchemaIds = new Set<string>();
+
+    for (const type of contract.generatedTypes) {
+      sections.push(`### \`${type.name}\``);
+      sections.push("");
+      sections.push("```typescript");
+      sections.push(type.code);
+      sections.push("```");
       sections.push("");
 
-      if (ep.pathParams.length > 0) {
-        sections.push("**Path Parameters:**");
-        sections.push("| Name | Type | Required | Description |");
-        sections.push("|------|------|----------|-------------|");
-        ep.pathParams.forEach((p) => {
-          sections.push(
-            `| \`${p.name}\` | ${p.type} | ${p.required ? "Yes" : "No"} | ${p.description ?? ""} |`
-          );
-        });
-        sections.push("");
-      }
-
-      if (ep.queryParams.length > 0) {
-        sections.push("**Query Parameters:**");
-        sections.push("| Name | Type | Required | Description |");
-        sections.push("|------|------|----------|-------------|");
-        ep.queryParams.forEach((p) => {
-          sections.push(
-            `| \`${p.name}\` | ${p.type} | ${p.required ? "Yes" : "No"} | ${p.description ?? ""} |`
-          );
-        });
-        sections.push("");
-      }
-
-      if (ep.requestBody) {
-        sections.push("**Request Body:**");
-        sections.push(`- Content-Type: \`${ep.requestBody.contentType}\``);
+      // Paired yup schema
+      const paired = contract.generatedSchemas.find((s) => s.linkedTypeId === type.id);
+      if (paired) {
+        pairedSchemaIds.add(paired.id);
+        sections.push("```typescript");
+        sections.push("// Yup validation");
+        sections.push(paired.code);
         sections.push("```");
-        sections.push(ep.requestBody.schema ?? "{}");
-        sections.push("```");
-        sections.push("");
-      }
-
-      if (ep.responseBody) {
-        sections.push("**Response:**");
-        sections.push(`- Status: \`${ep.responseBody.statusCode}\``);
-        if (ep.responseBody.isPaginated) sections.push("- Paginated: Yes");
-        sections.push("```");
-        sections.push(ep.responseBody.schema ?? "{}");
-        sections.push("```");
-        sections.push("");
-      }
-
-      const pageNames = getLinkedScreenNames(ep, contract.annotations, contract.screens);
-      if (pageNames.length > 0) {
-        sections.push(`**Used on pages:** ${pageNames.join(", ")}`);
-        sections.push("");
-      }
-
-      if (ep.notes) {
-        sections.push("**Notes:**");
-        sections.push(ep.notes);
         sections.push("");
       }
     }
-  }
 
-  // TypeScript Types
-  if (contract.generatedTypes.length > 0) {
-    sections.push("## TypeScript Types");
-    sections.push("");
-    sections.push("```typescript");
-    contract.generatedTypes.forEach((t) => {
-      sections.push(t.code);
+    // Orphan yup schemas (no linked type)
+    const orphans = contract.generatedSchemas.filter((s) => !pairedSchemaIds.has(s.id));
+    if (orphans.length > 0) {
+      sections.push("### Validation Schemas");
       sections.push("");
-    });
-    sections.push("```");
-    sections.push("");
-  }
-
-  // Yup Schemas
-  if (contract.generatedSchemas.length > 0) {
-    sections.push("## Yup Schemas");
-    sections.push("");
-    sections.push("```typescript");
-    sections.push("import * as yup from 'yup';");
-    sections.push("");
-    contract.generatedSchemas.forEach((s) => {
-      sections.push(s.code);
+      sections.push("```typescript");
+      sections.push("// Yup validation");
+      orphans.forEach((s) => {
+        sections.push(s.code);
+        sections.push("");
+      });
+      sections.push("```");
       sections.push("");
-    });
-    sections.push("```");
+    }
+  } else {
+    sections.push("_No types or validation schemas._");
     sections.push("");
   }
 
-  // Screen annotation legends
+  // Screen Annotations
+  sections.push("## Screen Annotations");
+  sections.push("");
   if (contract.screens.length > 0) {
-    sections.push("## Screen Annotations");
+    let hasAnnotations = false;
     for (const screen of contract.screens) {
-      const anns = contract.annotations.filter(
-        (a) => a.screenId === screen.id
-      );
+      const anns = contract.annotations.filter((a) => a.screenId === screen.id);
       if (anns.length === 0) continue;
+      hasAnnotations = true;
       sections.push(`### ${screen.name}`);
       sections.push("| Marker | Endpoint |");
       sections.push("|--------|----------|");
@@ -164,15 +223,22 @@ export function generateMarkdown(contract: Contract): string {
       }
       sections.push("");
     }
+    if (!hasAnnotations) {
+      sections.push("_No screen annotations._");
+      sections.push("");
+    }
+  } else {
+    sections.push("_No screens._");
+    sections.push("");
   }
 
   // Page → Endpoint Map
+  sections.push("## Page → Endpoint Map");
+  sections.push("");
   if (contract.screens.length > 0 && enabledEndpoints.length > 0) {
     const screenEpMap = buildScreenEndpointMap(enabledEndpoints, contract.annotations);
     const hasLinks = [...screenEpMap.values()].some((eps) => eps.length > 0);
     if (hasLinks) {
-      sections.push("## Page → Endpoint Map");
-      sections.push("");
       for (const screen of contract.screens) {
         const eps = screenEpMap.get(screen.id);
         if (!eps || eps.length === 0) continue;
@@ -182,7 +248,13 @@ export function generateMarkdown(contract: Contract): string {
         }
         sections.push("");
       }
+    } else {
+      sections.push("_No page-to-endpoint links._");
+      sections.push("");
     }
+  } else {
+    sections.push("_No pages or endpoints._");
+    sections.push("");
   }
 
   return sections.join("\n");
