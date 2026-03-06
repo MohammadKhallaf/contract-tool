@@ -21,3 +21,23 @@ export interface AIAnalysisResponse {
   reasoning?: string;
   raw?: string;
 }
+
+// AI session types for review & chat
+
+export type AIMessageRole = "user" | "assistant";
+
+export interface AIMessage {
+  id: string;
+  role: AIMessageRole;
+  content: string;
+  endpoints?: Partial<Endpoint>[];
+  timestamp: number;
+}
+
+export type StagedEndpointStatus = "new" | "modified" | "unchanged" | "removed";
+
+export interface StagedEndpoint {
+  endpoint: Partial<Endpoint>;
+  status: StagedEndpointStatus;
+  accepted: boolean;
+}

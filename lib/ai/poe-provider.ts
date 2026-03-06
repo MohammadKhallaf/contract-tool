@@ -27,6 +27,24 @@ export class PoeProvider implements AIProvider {
     return this.callPoe(this.model, content);
   }
 
+  async chat(messages: Array<{ role: string; content: unknown[] }>, maxTokens = 4096): Promise<AIAnalysisResponse> {
+    const res = await fetch("https://api.poe.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
+      body: JSON.stringify({ model: this.model, messages, stream: false, max_tokens: maxTokens }),
+    });
+    if (!res.ok) throw new Error(`Poe API error: ${await res.text()}`);
+    const data = await res.json();
+    const raw = data.choices?.[0]?.message?.content ?? "";
+    try {
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(jsonMatch?.[0] ?? raw);
+      return { endpoints: parsed.endpoints ?? [], reasoning: parsed.reasoning, raw };
+    } catch {
+      return { endpoints: [], reasoning: raw, raw };
+    }
+  }
+
   async analyze(request: AIAnalysisRequest): Promise<AIAnalysisResponse> {
     const content: unknown[] = [
       {

@@ -26,6 +26,47 @@ export class OpenAIProvider implements AIProvider {
     return data.choices?.[0]?.message?.content ?? "";
   }
 
+  async chat(messages: Array<{ role: string; content: unknown[] }>, maxTokens = 4096): Promise<AIAnalysisResponse> {
+    // Map to OpenAI format
+    const oaiMessages = messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages: oaiMessages,
+        max_tokens: maxTokens,
+        response_format: { type: "json_object" },
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`OpenAI API error: ${err}`);
+    }
+
+    const data = await res.json();
+    const raw = data.choices?.[0]?.message?.content ?? "";
+
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        endpoints: parsed.endpoints ?? [],
+        reasoning: parsed.reasoning,
+        raw,
+      };
+    } catch {
+      return { endpoints: [], reasoning: raw, raw };
+    }
+  }
+
   async analyze(request: AIAnalysisRequest): Promise<AIAnalysisResponse> {
     const userContent: unknown[] = [
       {

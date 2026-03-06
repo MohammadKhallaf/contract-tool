@@ -1,10 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronDown, ChevronRight, MessageSquare, Pencil, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, MessageSquare, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceBadge } from "./confidence-badge";
 import { EndpointDetail } from "./endpoint-detail";
@@ -38,45 +38,62 @@ export function EndpointRow({
   const [expanded, setExpanded] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
   const [draft, setDraft] = useState(endpoint.devComment ?? "");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasComment = Boolean(endpoint.devComment);
 
-  function saveComment() {
-    onComment(draft.trim());
-    setCommentOpen(false);
-  }
+  // Auto-save on blur with debounce
+  const handleCommentBlur = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const trimmed = draft.trim();
+      if (trimmed !== (endpoint.devComment ?? "")) {
+        onComment(trimmed);
+      }
+      if (!trimmed) setCommentOpen(false);
+    }, 300);
+  }, [draft, endpoint.devComment, onComment]);
 
-  function clearComment() {
-    setDraft("");
-    onComment("");
-    setCommentOpen(false);
-  }
+  // Truncated comment preview (first 60 chars)
+  const commentPreview = endpoint.devComment
+    ? endpoint.devComment.length > 60
+      ? endpoint.devComment.slice(0, 60) + "..."
+      : endpoint.devComment
+    : null;
 
   return (
     <div
       className={cn(
         "border rounded-lg overflow-hidden transition-all",
         !endpoint.enabled && "opacity-40",
-        isHighlighted && "ring-2 ring-orange-400 animate-pulse"
+        isHighlighted && "ring-2 ring-orange-400 animate-pulse",
+        hasComment && "border-l-2 border-l-amber-400"
       )}
       id={`endpoint-${endpoint.id}`}
     >
       <div className="flex items-center gap-3 p-3">
         <Switch checked={endpoint.enabled} onCheckedChange={onToggle} />
         <button
-          className="flex items-center gap-3 flex-1 text-left"
+          className="flex items-center gap-3 flex-1 text-left min-w-0"
           onClick={() => setExpanded(!expanded)}
         >
           <Badge
             variant="outline"
             className={cn(
-              "font-mono text-[11px] font-bold px-1.5 py-0 h-5 border",
+              "font-mono text-[11px] font-bold px-1.5 py-0 h-5 border shrink-0",
               METHOD_COLORS[endpoint.method] ?? ""
             )}
           >
             {endpoint.method}
           </Badge>
-          <code className="text-sm font-mono flex-1 truncate">{endpoint.path}</code>
+          <div className="flex-1 min-w-0">
+            <code className="text-sm font-mono truncate block">{endpoint.path}</code>
+            {commentPreview && !commentOpen && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 truncate mt-0.5">
+                {commentPreview}
+              </p>
+            )}
+          </div>
           <span className={cn("text-sm text-muted-foreground flex-1 hidden sm:block", expanded ? "break-words whitespace-normal" : "truncate")}>
             {endpoint.description}
           </span>
@@ -104,7 +121,7 @@ export function EndpointRow({
             variant="ghost"
             className={cn("h-7 w-7", hasComment && "text-amber-500")}
             title="Dev comment (included in next AI analysis)"
-            onClick={(e) => { e.stopPropagation(); setDraft(endpoint.devComment ?? ""); setCommentOpen((o) => !o); }}
+            onClick={(e) => { e.stopPropagation(); setCommentOpen((o) => !o); }}
           >
             <MessageSquare className="h-3.5 w-3.5" />
           </Button>
@@ -123,26 +140,18 @@ export function EndpointRow({
       </div>
 
       {commentOpen && (
-        <div className="border-t bg-amber-50/50 dark:bg-amber-950/20 px-3 py-2 space-y-2">
-          <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
-            Dev feedback — included in next AI analysis for refinement
+        <div className="border-t bg-amber-50/50 dark:bg-amber-950/20 px-3 py-2 space-y-1.5">
+          <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">
+            Dev feedback — auto-saves on blur, included in next AI analysis
           </p>
           <Textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            onBlur={handleCommentBlur}
             placeholder="e.g. This endpoint needs pagination, response schema is wrong, method should be PATCH..."
-            className="text-xs h-20 resize-none"
+            className="text-xs h-16 resize-none"
             autoFocus
           />
-          <div className="flex gap-2">
-            <Button size="sm" className="h-7 text-xs" onClick={saveComment}>Save</Button>
-            {hasComment && (
-              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground" onClick={clearComment}>
-                <X className="h-3 w-3" /> Clear
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setCommentOpen(false)}>Cancel</Button>
-          </div>
         </div>
       )}
 

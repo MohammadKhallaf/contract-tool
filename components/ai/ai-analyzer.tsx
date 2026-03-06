@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -20,12 +21,10 @@ import { OpenAIProvider } from "@/lib/ai/openai-provider";
 import { PoeProvider } from "@/lib/ai/poe-provider";
 import { buildAnalysisPrompt } from "@/lib/ai/prompts";
 import { serializeJiraStory } from "@/lib/parsers/jira-parser";
-import { generateTypes } from "@/lib/generators/type-generator";
-import { generateSchemas } from "@/lib/generators/schema-generator";
 import { extractPatterns } from "@/lib/specs/pattern-extractor";
 import { PatternPicker } from "@/components/ai/pattern-picker";
 import { toast } from "sonner";
-import type { Contract } from "@/types";
+import type { Contract, Endpoint } from "@/types";
 
 function buildPayload(
   contract: Contract,
@@ -146,15 +145,15 @@ function makeProvider(aiProvider: string, apiKey: string, model: string) {
   return null;
 }
 
-export function AIAnalyzer() {
+interface AIAnalyzerProps {
+  onAnalysisComplete: (result: { endpoints: Partial<Endpoint>[]; reasoning?: string }, overrideMode: boolean) => void;
+}
+
+export function AIAnalyzer({ onAnalysisComplete }: AIAnalyzerProps) {
   const [step, setStep] = useState<Step>("idle");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [overrideMode, setOverrideMode] = useState(false);
   const contract = useContractStore((s) => s.contract);
-  const addEndpoints = useContractStore((s) => s.addEndpoints);
-  const replaceEndpoints = useContractStore((s) => s.replaceEndpoints);
-  const setGeneratedTypes = useContractStore((s) => s.setGeneratedTypes);
-  const setGeneratedSchemas = useContractStore((s) => s.setGeneratedSchemas);
   const updateAiInstructions = useContractStore((s) => s.updateAiInstructions);
   const clearEndpoints = useContractStore((s) => s.clearEndpoints);
   const clearGeneratedOutput = useContractStore((s) => s.clearGeneratedOutput);
@@ -177,20 +176,13 @@ export function AIAnalyzer() {
   const payload = contract ? buildPayload(contract, specs, includeTypesInPrompt, patternSelections) : null;
   const hasExistingEndpoints = (contract?.endpoints.length ?? 0) > 0;
 
-  function addOrReplaceEndpoints(eps: Parameters<typeof addEndpoints>[0]) {
-    if (overrideMode) {
-      replaceEndpoints(eps);
-    } else {
-      addEndpoints(eps);
-    }
-    // Read the updated contract immediately (Zustand updates synchronously)
-    const updated = useContractStore.getState().contract;
-    if (!updated) return;
-    const newTypes = generateTypes(updated.endpoints, overrideMode ? [] : updated.generatedTypes);
-    setGeneratedTypes(newTypes);
-    const newSchemas = generateSchemas(newTypes, overrideMode ? [] : updated.generatedSchemas);
-    setGeneratedSchemas(newSchemas);
-  }
+  const stepProgress: Record<Step, number> = {
+    idle: 0,
+    describing: 30,
+    generating: 60,
+    loading: 50,
+    done: 100,
+  };
 
   async function analyze() {
     if (!contract || !apiKey) {
@@ -237,13 +229,8 @@ export function AIAnalyzer() {
         setStep("done");
 
         if (result.endpoints.length > 0) {
-          addOrReplaceEndpoints(result.endpoints);
-          const mode = overrideMode ? "replaced" : "added";
-          toast.success(
-            screenDataUrls.length > 0
-              ? `${result.endpoints.length} endpoint(s) ${mode} (2-step: vision → text model)`
-              : `${result.endpoints.length} endpoint(s) ${mode}`
-          );
+          onAnalysisComplete({ endpoints: result.endpoints, reasoning: result.reasoning }, overrideMode);
+          setPreviewOpen(false);
         } else {
           toast.warning("AI returned no endpoints. Check your API key and story.");
         }
@@ -265,9 +252,8 @@ export function AIAnalyzer() {
         setStep("done");
 
         if (result.endpoints.length > 0) {
-          addOrReplaceEndpoints(result.endpoints);
-          const mode = overrideMode ? "replaced" : "added";
-          toast.success(`${result.endpoints.length} endpoint(s) ${mode}`);
+          onAnalysisComplete({ endpoints: result.endpoints, reasoning: result.reasoning }, overrideMode);
+          setPreviewOpen(false);
         } else {
           toast.warning("AI returned no endpoints. Check your API key and story.");
         }
@@ -293,26 +279,31 @@ export function AIAnalyzer() {
         Preview
       </Button>
 
-      <Button
-        onClick={analyze}
-        disabled={loading || aiProvider === "manual" || !apiKey}
-        variant="outline"
-        className="gap-1.5 min-w-[160px]"
-        title={
-          aiProvider === "manual" || !apiKey
-            ? "Configure AI provider in Settings"
-            : textModel
-            ? "2-step mode: vision model reads screens → text model generates endpoints"
-            : "Single-call mode: one model sees images and generates endpoints directly"
-        }
-      >
-        {loading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Sparkles className="h-4 w-4" />
+      <div className="flex items-center gap-2">
+        <Button
+          onClick={analyze}
+          disabled={loading || aiProvider === "manual" || !apiKey}
+          variant="outline"
+          className="gap-1.5 min-w-[160px]"
+          title={
+            aiProvider === "manual" || !apiKey
+              ? "Configure AI provider in Settings"
+              : textModel
+              ? "2-step mode: vision model reads screens → text model generates endpoints"
+              : "Single-call mode: one model sees images and generates endpoints directly"
+          }
+        >
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          {STEP_LABEL[step]}
+        </Button>
+        {loading && (
+          <Progress value={stepProgress[step]} className="w-20 h-1.5" />
         )}
-        {STEP_LABEL[step]}
-      </Button>
+      </div>
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">

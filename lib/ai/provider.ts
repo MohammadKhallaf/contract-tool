@@ -3,4 +3,5 @@ import type { AIAnalysisRequest, AIAnalysisResponse } from "@/types";
 export interface AIProvider {
   analyze(request: AIAnalysisRequest): Promise<AIAnalysisResponse>;
   describeScreens?(dataUrls: string[]): Promise<string>;
+  chat?(messages: Array<{ role: string; content: unknown[] }>, maxTokens?: number): Promise<AIAnalysisResponse>;
 }

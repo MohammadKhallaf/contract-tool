@@ -1,3 +1,65 @@
+export function buildFollowUpPrompt(
+  currentEndpoints: Partial<import("@/types").Endpoint>[],
+  userInstruction: string,
+  customInstructions?: string
+): string {
+  const endpointsJson = JSON.stringify(
+    currentEndpoints.map((ep) => ({
+      method: ep.method,
+      path: ep.path,
+      description: ep.description,
+      pathParams: ep.pathParams,
+      queryParams: ep.queryParams,
+      headers: ep.headers,
+      requestBody: ep.requestBody,
+      responseBody: ep.responseBody,
+      notes: ep.notes,
+    })),
+    null,
+    2
+  );
+
+  return `You are an API contract generator in a follow-up conversation. The developer wants you to modify the current set of endpoints.
+
+Current endpoints:
+${endpointsJson}
+
+Schema rules (strictly follow these):
+- ALL field details belong in the schema string — never defer field information to the notes field
+- Schema values are TypeScript-style inline object literals: "{ field: type, field2?: type }"
+- Use camelCase for all property names, PascalCase for type names
+- Mark optional fields with "?" — only omit "?" for fields guaranteed present in every response
+- Nullable fields: "deletedAt?: string | null"
+- Date/time fields: always add an inline comment indicating the format — use "string /* ISO 8601 */" for ISO date strings or "number /* unix timestamp ms */" for timestamps
+- Enum fields: write the exact allowed values pipe-separated as the type. NEVER use plain "string" when a finite set of values is known
+- For paginated endpoints set isPaginated: true and write the full envelope
+- NEVER use a bare type name as a schema
+- notes is free-form context only: business rules, edge cases, auth notes. Do NOT list field names or types in notes.
+${customInstructions ? `\nCustom Instructions (from developer — follow these strictly):\n${customInstructions}\n` : ""}
+Developer's instruction:
+${userInstruction}
+
+Apply the developer's instruction to the current endpoints. Return the COMPLETE updated endpoint set (not just changes).
+
+Respond ONLY with valid JSON in this exact shape:
+{
+  "endpoints": [
+    {
+      "method": "GET|POST|PUT|PATCH|DELETE",
+      "path": "/api/resource/{id}",
+      "description": "What this endpoint does",
+      "pathParams": [{ "name": "id", "type": "string", "required": true }],
+      "queryParams": [{ "name": "sortOrder", "type": "asc | desc", "required": false }],
+      "headers": [{ "name": "Authorization", "value": "Bearer <token>", "required": true }],
+      "requestBody": { "contentType": "application/json", "schema": "{ name: string }" },
+      "responseBody": { "statusCode": 200, "schema": "{ id: string, name: string }", "isPaginated": false },
+      "notes": "Optional business context only"
+    }
+  ],
+  "reasoning": "Brief explanation of what changed and why"
+}`;
+}
+
 export function buildSpecAnalysisPrompt(specSummary: string): string {
   return `You are analyzing an OpenAPI/Swagger spec to extract its conventions for use in an API contract tool.
 

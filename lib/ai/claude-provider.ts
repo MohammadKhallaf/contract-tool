@@ -32,6 +32,43 @@ export class ClaudeProvider implements AIProvider {
     return data2.content?.[0]?.text ?? "";
   }
 
+  async chat(messages: Array<{ role: string; content: unknown[] }>, maxTokens = 4096): Promise<AIAnalysisResponse> {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": this.apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: this.model,
+        max_tokens: maxTokens,
+        messages,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Claude API error: ${err}`);
+    }
+
+    const data = await res.json();
+    const raw = data.content?.[0]?.text ?? "";
+
+    try {
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(jsonMatch?.[0] ?? raw);
+      return {
+        endpoints: parsed.endpoints ?? [],
+        reasoning: parsed.reasoning,
+        raw,
+      };
+    } catch {
+      return { endpoints: [], reasoning: raw, raw };
+    }
+  }
+
   async analyze(request: AIAnalysisRequest): Promise<AIAnalysisResponse> {
     const content: unknown[] = [
       {

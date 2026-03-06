@@ -18,10 +18,14 @@ import { SchemaList } from "@/components/schemas/schema-list";
 import { ExportPanel } from "@/components/export/export-panel";
 import { BeHandoffPanel } from "@/components/export/be-handoff-panel";
 import { AIAnalyzer } from "@/components/ai/ai-analyzer";
+import { AISessionPanel } from "@/components/ai/ai-session-panel";
 import { ErdView } from "@/components/erd/erd-view";
 import { Save, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useContractSave, loadContractById } from "@/hooks/use-contract";
+import { generateTypes } from "@/lib/generators/type-generator";
+import { generateSchemas } from "@/lib/generators/schema-generator";
+import type { Endpoint } from "@/types";
 
 export default function ContractPage() {
   const { id } = useParams<{ id: string }>();
@@ -36,6 +40,16 @@ export default function ContractPage() {
 
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(contract?.name ?? "");
+  const [aiSession, setAISession] = useState<{
+    endpoints: Partial<Endpoint>[];
+    reasoning?: string;
+    overrideMode: boolean;
+  } | null>(null);
+
+  const addEndpoints = useContractStore((s) => s.addEndpoints);
+  const replaceEndpoints = useContractStore((s) => s.replaceEndpoints);
+  const setGeneratedTypes = useContractStore((s) => s.setGeneratedTypes);
+  const setGeneratedSchemas = useContractStore((s) => s.setGeneratedSchemas);
   // Hydration guard: don't redirect until Zustand has rehydrated from localStorage
   const [hydrated, setHydrated] = useState(false);
 
@@ -110,11 +124,47 @@ export default function ContractPage() {
           </button>
         )}
         <div className="flex-1" />
-        <AIAnalyzer />
+        <AIAnalyzer
+          onAnalysisComplete={(result, overrideMode) =>
+            setAISession({ ...result, overrideMode })
+          }
+        />
         <Button size="sm" onClick={handleSave} className="gap-1.5">
           <Save className="h-4 w-4" /> Save
         </Button>
       </div>
+
+      {/* AI Session Panel */}
+      {aiSession && (
+        <AISessionPanel
+          initialEndpoints={aiSession.endpoints}
+          initialReasoning={aiSession.reasoning}
+          overrideMode={aiSession.overrideMode}
+          onCommit={(endpoints) => {
+            if (aiSession.overrideMode) {
+              replaceEndpoints(endpoints);
+            } else {
+              addEndpoints(endpoints);
+            }
+            const updated = useContractStore.getState().contract;
+            if (updated) {
+              const newTypes = generateTypes(
+                updated.endpoints,
+                aiSession.overrideMode ? [] : updated.generatedTypes
+              );
+              setGeneratedTypes(newTypes);
+              const newSchemas = generateSchemas(
+                newTypes,
+                aiSession.overrideMode ? [] : updated.generatedSchemas
+              );
+              setGeneratedSchemas(newSchemas);
+            }
+            setAISession(null);
+            toast.success(`${endpoints.length} endpoint(s) committed`);
+          }}
+          onClose={() => setAISession(null)}
+        />
+      )}
 
       {/* Main workspace */}
       <main className="flex-1 container mx-auto px-4 py-4 max-w-5xl">
