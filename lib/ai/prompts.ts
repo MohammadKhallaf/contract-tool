@@ -45,7 +45,8 @@ export function buildAnalysisPrompt(
   stackContext?: string,
   typesContext?: string,
   devFeedback?: string,
-  patternsContext?: string
+  patternsContext?: string,
+  customInstructions?: string
 ): string {
   return `You are an API contract generator. Analyze the JIRA story below and suggest API endpoints needed.
 
@@ -77,6 +78,7 @@ Schema rules (strictly follow these):
   Good: "Requires admin role. Returns 404 if campaign archived."
   Bad: "id (string), name (string), status (active | inactive)" — this belongs in the schema
 
+${customInstructions ? `\nCustom Instructions (from developer — follow these strictly):\n${customInstructions}\n` : ""}
 JIRA Story:
 ${jiraStory}
 ${screenContext ? `\nScreen Annotations & Notes:\n${screenContext}\n` : ""}${typesContext ? `\n${typesContext}\n` : ""}${devFeedback ? `\nDeveloper Feedback on Previous Output (address these issues):\n${devFeedback}\n` : ""}

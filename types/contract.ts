@@ -42,6 +42,11 @@ export interface Endpoint {
   isAiGenerated: boolean;
 }
 
+export interface ScreenRelation {
+  type: "popup_on" | "opens_page" | "linked_to";
+  targetScreenId: string;
+}
+
 export interface Annotation {
   id: string;
   screenId: string;
@@ -54,6 +59,7 @@ export interface Annotation {
   kind?: "point" | "rect";  // defaults to "point" when absent
   width?: number;            // percentage 0-100 (rect only)
   height?: number;           // percentage 0-100 (rect only)
+  screenRelation?: ScreenRelation; // e.g. "this popup belongs to page X" or "this button opens page Y"
 }
 
 export interface Screen {
@@ -100,4 +106,5 @@ export interface Contract {
   endpoints: Endpoint[];
   generatedTypes: GeneratedType[];
   generatedSchemas: GeneratedSchema[];
+  aiInstructions?: string; // custom user instructions included in every AI analysis
 }

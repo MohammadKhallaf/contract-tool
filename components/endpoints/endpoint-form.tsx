@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2 } from "lucide-react";
-import type { Endpoint, HttpMethod, ParamDefinition, Screen } from "@/types";
+import type { Endpoint, HttpMethod, ParamDefinition, HeaderDefinition, Screen } from "@/types";
 
 interface Props {
   open: boolean;
@@ -98,12 +98,78 @@ function ParamList({
   );
 }
 
+function HeaderList({
+  headers,
+  onChange,
+}: {
+  headers: HeaderDefinition[];
+  onChange: (h: HeaderDefinition[]) => void;
+}) {
+  function add() {
+    onChange([...headers, { name: "", value: "", required: false }]);
+  }
+  function update(i: number, field: keyof HeaderDefinition, value: string | boolean) {
+    onChange(
+      headers.map((h, idx) => (idx === i ? { ...h, [field]: value } : h))
+    );
+  }
+  function remove(i: number) {
+    onChange(headers.filter((_, idx) => idx !== i));
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Headers
+        </Label>
+        <Button type="button" size="sm" variant="outline" onClick={add} className="h-6 text-xs">
+          <Plus className="h-3 w-3 mr-1" /> Add
+        </Button>
+      </div>
+      {headers.map((h, i) => (
+        <div key={i} className="flex gap-2 items-center">
+          <Input
+            placeholder="name"
+            value={h.name}
+            onChange={(e) => update(i, "name", e.target.value)}
+            className="h-8 text-sm flex-1"
+          />
+          <Input
+            placeholder="value"
+            value={h.value}
+            onChange={(e) => update(i, "value", e.target.value)}
+            className="h-8 text-sm flex-1"
+          />
+          <div className="flex items-center gap-1">
+            <Switch
+              checked={h.required}
+              onCheckedChange={(v) => update(i, "required", v)}
+            />
+            <span className="text-xs text-muted-foreground">req</span>
+          </div>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={() => remove(i)}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function EndpointForm({ open, onClose, onSave, initial, screens = [] }: Props) {
   const [method, setMethod] = useState<HttpMethod>(initial?.method ?? "GET");
   const [path, setPath] = useState(initial?.path ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [pathParams, setPathParams] = useState<ParamDefinition[]>(initial?.pathParams ?? []);
   const [queryParams, setQueryParams] = useState<ParamDefinition[]>(initial?.queryParams ?? []);
+  const [headers, setHeaders] = useState<HeaderDefinition[]>(initial?.headers ?? []);
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [reqSchema, setReqSchema] = useState(initial?.requestBody?.schema ?? "");
   const [reqContentType, setReqContentType] = useState(
@@ -127,7 +193,7 @@ export function EndpointForm({ open, onClose, onSave, initial, screens = [] }: P
       description,
       pathParams,
       queryParams,
-      headers: initial?.headers ?? [],
+      headers,
       linkedScreenIds,
       notes: notes || undefined,
       requestBody: reqSchema
@@ -191,6 +257,7 @@ export function EndpointForm({ open, onClose, onSave, initial, screens = [] }: P
 
           <ParamList params={pathParams} onChange={setPathParams} label="Path Parameters" />
           <ParamList params={queryParams} onChange={setQueryParams} label="Query Parameters" />
+          <HeaderList headers={headers} onChange={setHeaders} />
 
           <div className="space-y-2">
             <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">

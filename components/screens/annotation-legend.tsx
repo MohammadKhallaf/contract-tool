@@ -12,7 +12,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Trash2, Square, MapPin } from "lucide-react";
+import { Trash2, Square, MapPin, Link2 } from "lucide-react";
+import type { ScreenRelation } from "@/types";
+
+const RELATION_LABELS: Record<ScreenRelation["type"], string> = {
+  popup_on: "Popup on",
+  opens_page: "Opens page",
+  linked_to: "Linked to",
+};
 
 interface Props {
   screenId: string;
@@ -25,12 +32,18 @@ export function AnnotationLegend({ screenId }: Props) {
   const endpoints = useContractStore(
     useShallow((s) => s.contract?.endpoints ?? [])
   );
+  const screens = useContractStore(
+    useShallow((s) => s.contract?.screens ?? [])
+  );
   const linkAnnotation = useContractStore((s) => s.linkAnnotation);
   const updateAnnotation = useContractStore((s) => s.updateAnnotation);
   const removeAnnotation = useContractStore((s) => s.removeAnnotation);
   const setHighlightedAnnotationId = useUIStore(
     (s) => s.setHighlightedAnnotationId
   );
+
+  // Other screens for relation targeting
+  const otherScreens = screens.filter((s) => s.id !== screenId);
 
   if (annotations.length === 0) {
     return (
@@ -89,6 +102,58 @@ export function AnnotationLegend({ screenId }: Props) {
               <Trash2 className="h-3 w-3" />
             </Button>
           </div>
+
+          {/* Screen relation config */}
+          {otherScreens.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />
+              <Select
+                value={ann.screenRelation?.type ?? "__none__"}
+                onValueChange={(v) => {
+                  if (v === "__none__") {
+                    updateAnnotation(ann.id, { screenRelation: undefined });
+                  } else {
+                    const currentTarget = ann.screenRelation?.targetScreenId ?? otherScreens[0].id;
+                    updateAnnotation(ann.id, {
+                      screenRelation: { type: v as ScreenRelation["type"], targetScreenId: currentTarget },
+                    });
+                  }
+                }}
+              >
+                <SelectTrigger className="h-6 text-[10px] w-24">
+                  <SelectValue placeholder="Relation..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  <SelectItem value="popup_on">Popup on</SelectItem>
+                  <SelectItem value="opens_page">Opens page</SelectItem>
+                  <SelectItem value="linked_to">Linked to</SelectItem>
+                </SelectContent>
+              </Select>
+              {ann.screenRelation && (
+                <Select
+                  value={ann.screenRelation.targetScreenId}
+                  onValueChange={(v) => {
+                    updateAnnotation(ann.id, {
+                      screenRelation: { ...ann.screenRelation!, type: ann.screenRelation!.type, targetScreenId: v },
+                    });
+                  }}
+                >
+                  <SelectTrigger className="h-6 text-[10px] flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {otherScreens.map((sc) => (
+                      <SelectItem key={sc.id} value={sc.id}>
+                        {sc.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
+
           <Textarea
             placeholder="Add a comment..."
             className="h-14 text-xs resize-none"
@@ -100,6 +165,18 @@ export function AnnotationLegend({ screenId }: Props) {
               }
             }}
           />
+
+          {/* Show relation badge if set */}
+          {ann.screenRelation && (
+            <div className="flex items-center gap-1">
+              <Badge variant="outline" className="text-[9px] h-4 px-1">
+                {RELATION_LABELS[ann.screenRelation.type]}
+              </Badge>
+              <span className="text-[10px] text-muted-foreground truncate">
+                {screens.find((s) => s.id === ann.screenRelation!.targetScreenId)?.name ?? "Unknown"}
+              </span>
+            </div>
+          )}
         </div>
       ))}
     </div>

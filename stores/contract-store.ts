@@ -39,6 +39,12 @@ interface ContractState {
   setJiraStories: (stories: JiraStory[]) => void;
   // stack
   updateStack: (stack: ContractStack) => void;
+  // ai instructions
+  updateAiInstructions: (instructions: string) => void;
+  // clear/override
+  clearEndpoints: () => void;
+  clearGeneratedOutput: () => void;
+  replaceEndpoints: (eps: Partial<Endpoint>[]) => void;
   // screens
   addScreen: (screen: Omit<Screen, "id" | "annotationIds">) => string;
   removeScreen: (id: string) => void;
@@ -159,6 +165,71 @@ export const useContractStore = create<ContractState>()(
             ? { contract: { ...s.contract, stack, updatedAt: new Date().toISOString() } }
             : s
         ),
+
+      updateAiInstructions: (instructions) =>
+        set((s) =>
+          s.contract
+            ? { contract: { ...s.contract, aiInstructions: instructions || undefined, updatedAt: new Date().toISOString() } }
+            : s
+        ),
+
+      clearEndpoints: () =>
+        set((s) =>
+          s.contract
+            ? {
+                contract: {
+                  ...s.contract,
+                  endpoints: [],
+                  annotations: s.contract.annotations.map((a) => ({ ...a, endpointId: undefined })),
+                  updatedAt: new Date().toISOString(),
+                },
+              }
+            : s
+        ),
+
+      clearGeneratedOutput: () =>
+        set((s) =>
+          s.contract
+            ? {
+                contract: {
+                  ...s.contract,
+                  generatedTypes: [],
+                  generatedSchemas: [],
+                  updatedAt: new Date().toISOString(),
+                },
+              }
+            : s
+        ),
+
+      replaceEndpoints: (eps) => {
+        const newEps: Endpoint[] = eps.map((ep) => ({
+          id: makeId(),
+          method: (ep.method as HttpMethod) ?? "GET",
+          path: ep.path ?? "",
+          description: ep.description ?? "",
+          enabled: true,
+          isAiGenerated: true,
+          pathParams: ep.pathParams ?? [],
+          queryParams: ep.queryParams ?? [],
+          headers: ep.headers ?? [],
+          linkedScreenIds: ep.linkedScreenIds ?? [],
+          confidence: ep.confidence,
+          requestBody: ep.requestBody,
+          responseBody: ep.responseBody,
+          notes: ep.notes,
+        }));
+        set((s) =>
+          s.contract
+            ? {
+                contract: {
+                  ...s.contract,
+                  endpoints: newEps,
+                  updatedAt: new Date().toISOString(),
+                },
+              }
+            : s
+        );
+      },
 
       addScreen: (screen) => {
         const id = makeId();

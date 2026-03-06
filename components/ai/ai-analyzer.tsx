@@ -1,14 +1,17 @@
 "use client";
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Sparkles, Loader2, Eye, Layers, ChevronDown } from "lucide-react";
+import { Sparkles, Loader2, Eye, Layers, ChevronDown, Trash2, Replace, Plus } from "lucide-react";
 import { useContractStore } from "@/stores/contract-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSpecsStore } from "@/stores/specs-store";
@@ -72,7 +75,16 @@ function buildPayload(
             : null;
           const linked = endpoint ? ` → linked to ${endpoint.method} ${endpoint.path}` : "";
           const comment = ann.comment ? ` — "${ann.comment}"` : "";
-          lines.push(`    #${ann.number} ${pos}${linked}${comment}`);
+          // Screen relation context
+          let relation = "";
+          if (ann.screenRelation) {
+            const targetScreen = contract.screens.find((s) => s.id === ann.screenRelation!.targetScreenId);
+            if (targetScreen) {
+              const relType = ann.screenRelation.type.replace(/_/g, " ");
+              relation = ` [${relType} "${targetScreen.name}"]`;
+            }
+          }
+          lines.push(`    #${ann.number} ${pos}${linked}${relation}${comment}`);
         }
       }
       return lines.join("\n");
@@ -110,7 +122,8 @@ function buildPayload(
     stackContext || undefined,
     combinedTypesContext,
     devFeedback || undefined,
-    patternsContext
+    patternsContext,
+    contract.aiInstructions || undefined
   );
 
   return { jiraStory, screenDataUrls, existingPatterns, screenContext, stackContext, devFeedback, patternsContext, allPatterns, prompt };
@@ -136,25 +149,46 @@ function makeProvider(aiProvider: string, apiKey: string, model: string) {
 export function AIAnalyzer() {
   const [step, setStep] = useState<Step>("idle");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [overrideMode, setOverrideMode] = useState(false);
   const contract = useContractStore((s) => s.contract);
   const addEndpoints = useContractStore((s) => s.addEndpoints);
+  const replaceEndpoints = useContractStore((s) => s.replaceEndpoints);
   const setGeneratedTypes = useContractStore((s) => s.setGeneratedTypes);
   const setGeneratedSchemas = useContractStore((s) => s.setGeneratedSchemas);
+  const updateAiInstructions = useContractStore((s) => s.updateAiInstructions);
+  const clearEndpoints = useContractStore((s) => s.clearEndpoints);
+  const clearGeneratedOutput = useContractStore((s) => s.clearGeneratedOutput);
   const { aiProvider, apiKey, model, textModel, includeTypesInPrompt, patternSelections } = useSettingsStore();
   const specs = useSpecsStore((s) => s.specs);
   const [patternPickerOpen, setPatternPickerOpen] = useState(false);
 
+  const instructionsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleInstructionsChange = useCallback(
+    (value: string) => {
+      if (instructionsTimeout.current) clearTimeout(instructionsTimeout.current);
+      instructionsTimeout.current = setTimeout(() => {
+        updateAiInstructions(value);
+      }, 500);
+    },
+    [updateAiInstructions]
+  );
+
   const loading = step === "describing" || step === "generating" || step === "loading";
   const payload = contract ? buildPayload(contract, specs, includeTypesInPrompt, patternSelections) : null;
+  const hasExistingEndpoints = (contract?.endpoints.length ?? 0) > 0;
 
-  function addEndpointsAndRefresh(eps: Parameters<typeof addEndpoints>[0]) {
-    addEndpoints(eps);
+  function addOrReplaceEndpoints(eps: Parameters<typeof addEndpoints>[0]) {
+    if (overrideMode) {
+      replaceEndpoints(eps);
+    } else {
+      addEndpoints(eps);
+    }
     // Read the updated contract immediately (Zustand updates synchronously)
     const updated = useContractStore.getState().contract;
     if (!updated) return;
-    const newTypes = generateTypes(updated.endpoints, updated.generatedTypes);
+    const newTypes = generateTypes(updated.endpoints, overrideMode ? [] : updated.generatedTypes);
     setGeneratedTypes(newTypes);
-    const newSchemas = generateSchemas(newTypes, updated.generatedSchemas);
+    const newSchemas = generateSchemas(newTypes, overrideMode ? [] : updated.generatedSchemas);
     setGeneratedSchemas(newSchemas);
   }
 
@@ -203,11 +237,12 @@ export function AIAnalyzer() {
         setStep("done");
 
         if (result.endpoints.length > 0) {
-          addEndpointsAndRefresh(result.endpoints);
+          addOrReplaceEndpoints(result.endpoints);
+          const mode = overrideMode ? "replaced" : "added";
           toast.success(
             screenDataUrls.length > 0
-              ? `${result.endpoints.length} endpoint(s) added (2-step: vision → text model)`
-              : `${result.endpoints.length} endpoint(s) added`
+              ? `${result.endpoints.length} endpoint(s) ${mode} (2-step: vision → text model)`
+              : `${result.endpoints.length} endpoint(s) ${mode}`
           );
         } else {
           toast.warning("AI returned no endpoints. Check your API key and story.");
@@ -230,8 +265,9 @@ export function AIAnalyzer() {
         setStep("done");
 
         if (result.endpoints.length > 0) {
-          addEndpointsAndRefresh(result.endpoints);
-          toast.success(`${result.endpoints.length} endpoint(s) added`);
+          addOrReplaceEndpoints(result.endpoints);
+          const mode = overrideMode ? "replaced" : "added";
+          toast.success(`${result.endpoints.length} endpoint(s) ${mode}`);
         } else {
           toast.warning("AI returned no endpoints. Check your API key and story.");
         }
@@ -286,6 +322,70 @@ export function AIAnalyzer() {
 
           {payload && contract && (
             <div className="flex-1 overflow-y-auto space-y-4 text-sm">
+              {/* Custom AI instructions */}
+              <div className="rounded-md border p-3 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Custom Instructions
+                </p>
+                <Textarea
+                  placeholder="Add instructions for the AI (e.g. 'All endpoints need Bearer auth', 'Use /v2/ prefix', 'Response dates are unix timestamps')..."
+                  className="min-h-16 text-xs resize-none"
+                  defaultValue={contract.aiInstructions ?? ""}
+                  onChange={(e) => handleInstructionsChange(e.target.value)}
+                />
+              </div>
+
+              {/* Override mode + clear controls */}
+              <div className="rounded-md border p-3 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Generation Mode
+                </p>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Switch checked={overrideMode} onCheckedChange={setOverrideMode} />
+                    <Label className="text-xs font-normal cursor-pointer">
+                      {overrideMode ? (
+                        <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                          <Replace className="h-3 w-3" /> Replace existing endpoints
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1">
+                          <Plus className="h-3 w-3" /> Append to existing endpoints
+                        </span>
+                      )}
+                    </Label>
+                  </div>
+                </div>
+                {hasExistingEndpoints && (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1 text-destructive hover:text-destructive"
+                      onClick={() => {
+                        clearEndpoints();
+                        toast.success("All endpoints cleared");
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3" /> Clear Endpoints ({contract.endpoints.length})
+                    </Button>
+                    {(contract.generatedTypes.length > 0 || contract.generatedSchemas.length > 0) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1 text-destructive hover:text-destructive"
+                        onClick={() => {
+                          clearGeneratedOutput();
+                          toast.success("Types & schemas cleared");
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" /> Clear Types & Schemas
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Images summary */}
               <div className="rounded-md border p-3 space-y-1">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
