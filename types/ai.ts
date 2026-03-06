@@ -12,6 +12,8 @@ export interface AIAnalysisRequest {
   screenDataUrls?: string[];
   existingPatterns?: string;
   screenContext?: string;
+  stackContext?: string;
+  patternsContext?: string;
 }
 
 export interface AIAnalysisResponse {

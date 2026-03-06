@@ -1,11 +1,10 @@
 /**
- * Compress a base64 data URL or File to a JPEG data URL.
- * Resizes to maxSize px on the longest side and applies the given quality.
+ * Resize a base64 data URL to fit within maxSize px on the longest side.
+ * Keeps the original format (PNG) to preserve full image quality.
  */
 export async function compressDataUrl(
   dataUrl: string,
-  maxSize = 1024,
-  quality = 0.7
+  maxSize = 1920
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -25,7 +24,7 @@ export async function compressDataUrl(
       canvas.height = height;
       const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
       ctx.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL("image/jpeg", quality));
+      resolve(canvas.toDataURL("image/png"));
     };
     img.onerror = reject;
     img.src = dataUrl;
@@ -33,16 +32,15 @@ export async function compressDataUrl(
 }
 
 /**
- * Compress a File object to a JPEG data URL.
+ * Resize a File object to a PNG data URL.
  */
 export async function compressFile(
   file: File,
-  maxSize = 1024,
-  quality = 0.7
+  maxSize = 1920
 ): Promise<string> {
   const url = URL.createObjectURL(file);
   try {
-    return await compressDataUrl(url, maxSize, quality);
+    return await compressDataUrl(url, maxSize);
   } finally {
     URL.revokeObjectURL(url);
   }

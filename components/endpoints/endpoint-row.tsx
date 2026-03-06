@@ -77,7 +77,7 @@ export function EndpointRow({
             {endpoint.method}
           </Badge>
           <code className="text-sm font-mono flex-1 truncate">{endpoint.path}</code>
-          <span className="text-sm text-muted-foreground flex-1 truncate hidden sm:block">
+          <span className={cn("text-sm text-muted-foreground flex-1 hidden sm:block", expanded ? "break-words whitespace-normal" : "truncate")}>
             {endpoint.description}
           </span>
           {endpoint.confidence && (

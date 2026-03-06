@@ -1,9 +1,138 @@
-import type { Contract } from "@/types";
+import type { Contract, Endpoint } from "@/types";
 import { getLinkedScreenNames, buildScreenEndpointMap } from "@/lib/utils/screen-links";
+import { extractDataItemShape, parseTsObjectLiteral } from "./schema-utils";
+
+/** Escape pipe characters inside markdown table cells */
+function escPipe(s: string): string {
+  return s.replace(/\|/g, "\\|");
+}
 
 function schemaFence(schema: string | undefined): string {
   const body = schema?.trim() || "{}";
   return `\`\`\`jsonc\n${body}\n\`\`\``;
+}
+
+/** Render the response section for an endpoint in a structured way */
+function renderResponseSection(ep: Endpoint): string[] {
+  const lines: string[] = [];
+  if (!ep.responseBody) {
+    lines.push("**Response:** None");
+    return lines;
+  }
+
+  const rawSchema = ep.responseBody.schema ?? "";
+  const paginated = ep.responseBody.isPaginated;
+  const statusCode = ep.responseBody.statusCode;
+
+  if (paginated) {
+    const dataShape = extractDataItemShape(rawSchema);
+    lines.push(`**Response:** \`${statusCode}\` *(Paginated)*`);
+    lines.push("");
+    lines.push("| Field | Type |");
+    lines.push("|-------|------|");
+    if (dataShape?.isInline) {
+      lines.push(`| \`data\` | \`object[]\` — see item fields below |`);
+    } else if (dataShape && !dataShape.isInline) {
+      lines.push(`| \`data\` | \`${dataShape.namedType}[]\` |`);
+    } else {
+      lines.push("| `data` | `object[]` |");
+    }
+    lines.push("| `total` | `number` |");
+    lines.push("| `offset` | `number` |");
+    lines.push("| `itemsPerPage` | `number` |");
+    if (dataShape?.isInline) {
+      // Try to render as a field table; fall back to jsonc fence
+      const itemFields = parseTsObjectLiteral(dataShape.itemShape);
+      if (itemFields.length > 0) {
+        lines.push("");
+        lines.push("**Item fields:**");
+        lines.push("");
+        lines.push("| Field | Type | Required |");
+        lines.push("|-------|------|----------|");
+        for (const f of itemFields) {
+          lines.push(`| \`${f.name}\` | \`${escPipe(f.type)}\` | ${f.required ? "Yes" : "No"} |`);
+        }
+      } else {
+        lines.push("");
+        lines.push("**Item fields:**");
+        lines.push(schemaFence(dataShape.itemShape));
+      }
+    }
+  } else if (rawSchema && !rawSchema.trim().startsWith("{")) {
+    lines.push(`**Response:** \`${statusCode}\``);
+    lines.push("");
+    lines.push(`> Type: \`${rawSchema.trim()}\``);
+  } else {
+    lines.push(`**Response:** \`${statusCode}\``);
+    lines.push("");
+    lines.push(schemaFence(rawSchema));
+  }
+
+  return lines;
+}
+
+/** Parse notes and render "TypeName includes: ..." patterns as field tables */
+function renderNotes(notes: string | undefined): string[] {
+  if (!notes) return ["**Notes:** None"];
+
+  const lines: string[] = [];
+
+  const includesPattern = /(\w+)\s+includes?:\s*([^.]+(?:\.[^.]+)*?)(?=\s+\w+\s+includes?:|$)/gi;
+  const fieldBlocks: { typeName: string; raw: string }[] = [];
+  let plainNotes = notes;
+
+  let m: RegExpExecArray | null;
+  while ((m = includesPattern.exec(notes)) !== null) {
+    fieldBlocks.push({ typeName: m[1], raw: m[2].trim() });
+    plainNotes = plainNotes.replace(m[0], "").trim();
+  }
+
+  const plain = plainNotes.trim();
+  if (plain) {
+    lines.push(`**Notes:** ${plain}`);
+  } else if (fieldBlocks.length > 0) {
+    lines.push("**Notes:**");
+  } else {
+    lines.push("**Notes:** None");
+    return lines;
+  }
+
+  for (const block of fieldBlocks) {
+    lines.push("");
+    lines.push(`**\`${block.typeName}\` fields:**`);
+    lines.push("");
+    lines.push("| Field | Type | Notes |");
+    lines.push("|-------|------|-------|");
+
+    // Depth-aware split on commas outside parentheses
+    const tokens: string[] = [];
+    let cur = "", depth = 0;
+    for (const ch of block.raw) {
+      if (ch === "(" ) depth++;
+      else if (ch === ")") depth--;
+      else if (ch === "," && depth === 0) { if (cur.trim()) tokens.push(cur.trim()); cur = ""; continue; }
+      cur += ch;
+    }
+    if (cur.trim()) tokens.push(cur.trim());
+
+    tokens.forEach((token) => {
+      // "fieldName (type: description)" — e.g. status (string: active | completed | in progress)
+      const withTypeAndDesc = token.match(/^(\w+)\s+\(([^:)]+):\s*(.+)\)$/);
+      // "fieldName (type)" — e.g. name (string)
+      const withType = token.match(/^(\w+)\s+\(([^)]+)\)$/);
+      if (withTypeAndDesc) {
+        const [, name, type, desc] = withTypeAndDesc;
+        lines.push(`| \`${name}\` | \`${escPipe(type.trim())}\` | ${escPipe(desc.trim())} |`);
+      } else if (withType) {
+        const [, name, type] = withType;
+        lines.push(`| \`${name}\` | \`${escPipe(type.trim())}\` | — |`);
+      } else {
+        lines.push(`| \`${token}\` | — | — |`);
+      }
+    });
+  }
+
+  return lines;
 }
 
 export function generateMarkdown(contract: Contract): string {
@@ -89,7 +218,7 @@ export function generateMarkdown(contract: Contract): string {
       sections.push("|------|------|----------|-------------|");
       ep.pathParams.forEach((p) => {
         sections.push(
-          `| \`${p.name}\` | ${p.type} | ${p.required ? "Yes" : "No"} | ${p.description ?? ""} |`
+          `| \`${p.name}\` | ${escPipe(p.type)} | ${p.required ? "Yes" : "No"} | ${escPipe(p.description ?? "")} |`
         );
       });
     } else {
@@ -104,7 +233,7 @@ export function generateMarkdown(contract: Contract): string {
       sections.push("|------|------|----------|-------------|");
       ep.queryParams.forEach((p) => {
         sections.push(
-          `| \`${p.name}\` | ${p.type} | ${p.required ? "Yes" : "No"} | ${p.description ?? ""} |`
+          `| \`${p.name}\` | ${escPipe(p.type)} | ${p.required ? "Yes" : "No"} | ${escPipe(p.description ?? "")} |`
         );
       });
     } else {
@@ -122,16 +251,7 @@ export function generateMarkdown(contract: Contract): string {
     sections.push("");
 
     // Response
-    if (ep.responseBody) {
-      sections.push(`**Response:** \`${ep.responseBody.statusCode}\``);
-      sections.push(schemaFence(ep.responseBody.schema));
-      if (ep.responseBody.isPaginated) {
-        sections.push("");
-        sections.push("_Paginated:_ Yes");
-      }
-    } else {
-      sections.push("**Response:** None");
-    }
+    renderResponseSection(ep).forEach((line) => sections.push(line));
     sections.push("");
 
     // Used on Pages
@@ -144,11 +264,7 @@ export function generateMarkdown(contract: Contract): string {
     sections.push("");
 
     // Notes
-    if (ep.notes) {
-      sections.push(`**Notes:** ${ep.notes}`);
-    } else {
-      sections.push("**Notes:** None");
-    }
+    renderNotes(ep.notes).forEach((line) => sections.push(line));
     sections.push("");
 
     sections.push("---");

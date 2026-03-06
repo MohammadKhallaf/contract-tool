@@ -31,7 +31,15 @@ export class PoeProvider implements AIProvider {
     const content: unknown[] = [
       {
         type: "text",
-        text: buildAnalysisPrompt(request.jiraStory, request.existingPatterns ?? "", request.screenContext),
+        text: buildAnalysisPrompt(
+          request.jiraStory,
+          request.existingPatterns ?? "",
+          request.screenContext,
+          request.stackContext,
+          undefined,
+          undefined,
+          request.patternsContext
+        ),
       },
     ];
     // fallback: attach images directly if called in single-step mode

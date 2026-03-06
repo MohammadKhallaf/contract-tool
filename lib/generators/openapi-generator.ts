@@ -1,7 +1,24 @@
 import type { Contract, Endpoint, Annotation, Screen, GeneratedType } from "@/types";
 import { getLinkedScreenNames } from "@/lib/utils/screen-links";
+import {
+  extractDataItemShape,
+  deriveItemTypeName,
+  isUnquotedEnum,
+  schemaStringToJsonSchema as sharedSchemaStringToJsonSchema,
+  tsTypeToJsonSchema as sharedTsTypeToJsonSchema,
+} from "./schema-utils";
 
-function methodToOpenApi(ep: Endpoint, annotations: Annotation[], screens: Screen[]): Record<string, unknown> {
+function schemaStringToJsonSchema(schema: string): Record<string, unknown> {
+  return sharedSchemaStringToJsonSchema(schema); // OpenAPI 3 default: nullable
+}
+
+function methodToOpenApi(
+  ep: Endpoint,
+  annotations: Annotation[],
+  screens: Screen[],
+  knownTypes: Set<string>,
+  additionalSchemas: Record<string, unknown>,
+): Record<string, unknown> {
   const operation: Record<string, unknown> = {
     summary: ep.description,
     operationId: `${ep.method.toLowerCase()}_${ep.path.replace(/[^a-zA-Z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "")}`,
@@ -17,7 +34,7 @@ function methodToOpenApi(ep: Endpoint, annotations: Annotation[], screens: Scree
       in: "path",
       required: true,
       description: p.description,
-      schema: { type: mapType(p.type) },
+      schema: paramSchema(p.type),
     });
   });
 
@@ -27,7 +44,7 @@ function methodToOpenApi(ep: Endpoint, annotations: Annotation[], screens: Scree
       in: "query",
       required: p.required,
       description: p.description,
-      schema: { type: mapType(p.type) },
+      schema: paramSchema(p.type),
     });
   });
 
@@ -55,18 +72,36 @@ function methodToOpenApi(ep: Endpoint, annotations: Annotation[], screens: Scree
   const statusCode = ep.responseBody?.statusCode ?? 200;
   let responseSchema: unknown = { type: "object" };
   if (ep.responseBody) {
-    responseSchema = schemaStringToJsonSchema(ep.responseBody.schema);
+    const rawSchema = ep.responseBody.schema ?? "";
     if (ep.responseBody.isPaginated) {
+      const dataShape = extractDataItemShape(rawSchema);
+      let itemSchema: Record<string, unknown>;
+
+      if (dataShape?.isInline) {
+        // Auto-create a $ref schema for the inline item shape
+        const schemaName = deriveItemTypeName(ep.path, ep.method);
+        if (!additionalSchemas[schemaName]) {
+          additionalSchemas[schemaName] = schemaStringToJsonSchema(dataShape.itemShape);
+        }
+        itemSchema = { $ref: `#/components/schemas/${schemaName}` };
+      } else if (dataShape && !dataShape.isInline && knownTypes.has(dataShape.namedType!)) {
+        itemSchema = { $ref: `#/components/schemas/${dataShape.namedType}` };
+      } else {
+        itemSchema = { type: "object" };
+      }
+
       responseSchema = {
         type: "object",
         required: ["data", "total", "offset", "itemsPerPage"],
         properties: {
-          data: { type: "array", items: responseSchema },
+          data: { type: "array", items: itemSchema },
           total: { type: "integer" },
           offset: { type: "integer" },
           itemsPerPage: { type: "integer" },
         },
       };
+    } else {
+      responseSchema = schemaStringToJsonSchema(rawSchema);
     }
   }
 
@@ -88,7 +123,6 @@ function methodToOpenApi(ep: Endpoint, annotations: Annotation[], screens: Scree
 function parseInterfaceFields(code: string): { name: string; type: string; required: boolean }[] {
   const fields: { name: string; type: string; required: boolean }[] = [];
   for (const line of code.split("\n")) {
-    // Skip comment lines
     if (line.trim().startsWith("//")) continue;
     const m = line.match(/^\s+(\w+)(\?)?\s*:\s*(.+?);?\s*$/);
     if (m) {
@@ -98,96 +132,19 @@ function parseInterfaceFields(code: string): { name: string; type: string; requi
   return fields;
 }
 
-/** Parse a TypeScript/JS object literal like "{ id: string, name?: string }" into JSON schema fields */
-function parseTsObjectLiteral(schema: string): { name: string; type: string; required: boolean }[] {
-  const fields: { name: string; type: string; required: boolean }[] = [];
-  // Strip outer braces and split by comma (simple, non-nested)
-  const inner = schema.trim().replace(/^\{|\}$/g, "").trim();
-  if (!inner) return fields;
-  // Split on commas not inside brackets
-  const parts: string[] = [];
-  let depth = 0;
-  let current = "";
-  for (const ch of inner) {
-    if (ch === "{" || ch === "[" || ch === "(") depth++;
-    else if (ch === "}" || ch === "]" || ch === ")") depth--;
-    else if (ch === "," && depth === 0) { parts.push(current); current = ""; continue; }
-    current += ch;
-  }
-  if (current.trim()) parts.push(current);
-  for (const part of parts) {
-    const m = part.trim().match(/^(\w+)(\?)?\s*:\s*(.+)$/);
-    if (m) fields.push({ name: m[1], type: m[3].trim(), required: !m[2] });
-  }
-  return fields;
-}
-
-/** Convert a schema string (TS object literal OR JSON) into a JSON Schema object */
-function schemaStringToJsonSchema(schema: string): Record<string, unknown> {
-  if (!schema || !schema.trim()) return { type: "object" };
-  // Try JSON parse first
-  try {
-    const parsed = JSON.parse(schema);
-    if (typeof parsed === "object" && parsed !== null) return parsed as Record<string, unknown>;
-  } catch { /* fall through */ }
-  // Try TS object literal
-  const fields = parseTsObjectLiteral(schema);
-  if (fields.length > 0) {
-    const properties: Record<string, unknown> = {};
-    const required: string[] = [];
-    for (const f of fields) {
-      properties[f.name] = tsTypeToJsonSchema(f.type);
-      if (f.required) required.push(f.name);
-    }
-    const result: Record<string, unknown> = { type: "object", properties };
-    if (required.length > 0) result.required = required;
-    return result;
-  }
-  // Fallback — treat as description
-  return { type: "object", description: schema.slice(0, 120) };
-}
-
-function tsTypeToJsonSchema(tsType: string): Record<string, unknown> {
-  const trimmed = tsType.trim();
-
-  // Nullable: "string | null" → { type: "string", nullable: true }
-  if (trimmed.includes("| null") || trimmed.includes("null |")) {
-    const base = trimmed.replace(/\s*\|\s*null/g, "").replace(/null\s*\|\s*/g, "").trim();
-    return { ...tsTypeToJsonSchema(base), nullable: true };
-  }
-
-  // String enum union: "active" | "inactive" → { type: "string", enum: [...] }
-  if (/^["']/.test(trimmed) || trimmed.includes('" | "') || trimmed.includes("' | '")) {
-    const values = trimmed.match(/"([^"]+)"|'([^']+)'/g);
-    if (values && values.length > 0) {
-      return { type: "string", enum: values.map((v) => v.replace(/^["']|["']$/g, "")) };
-    }
-  }
-
-  const t = trimmed.toLowerCase();
-  if (t === "string") return { type: "string" };
-  if (t === "number" || t === "integer" || t === "int") return { type: "integer" };
-  if (t === "float" || t === "double") return { type: "number" };
-  if (t === "boolean" || t === "bool") return { type: "boolean" };
-  if (t === "unknown" || t === "any") return {};
-  if (t.endsWith("[]")) return { type: "array", items: tsTypeToJsonSchema(trimmed.slice(0, -2)) };
-  return { type: "string", description: trimmed };
-}
-
 function typeToJsonSchema(type: GeneratedType): Record<string, unknown> {
   const fields = parseInterfaceFields(type.code);
   if (fields.length > 0) {
     const properties: Record<string, unknown> = {};
     const required: string[] = [];
     for (const f of fields) {
-      properties[f.name] = tsTypeToJsonSchema(f.type);
+      properties[f.name] = sharedTsTypeToJsonSchema(f.type);
       if (f.required) required.push(f.name);
     }
     const schema: Record<string, unknown> = { type: "object", properties };
     if (required.length > 0) schema.required = required;
     return schema;
   }
-  // Try extracting schema hint from comments like "// Schema hint: { id: string }"
   const hintMatch = type.code.match(/\/\/\s*(?:Schema hint|Define schema):\s*(.+)/);
   if (hintMatch) {
     return schemaStringToJsonSchema(hintMatch[1].trim());
@@ -203,14 +160,33 @@ function mapType(t: string): string {
   return "string";
 }
 
+/** Build OpenAPI 3 schema object for a param, detecting enums from pipe-separated values */
+function paramSchema(rawType: string): Record<string, unknown> {
+  const trimmed = rawType.trim();
+  if (trimmed.includes("|")) {
+    const parts = trimmed.split("|").map((s) => s.trim());
+    if (isUnquotedEnum(parts)) {
+      return { type: "string", enum: parts };
+    }
+    const quoted = trimmed.match(/"([^"]+)"|'([^']+)'/g);
+    if (quoted && quoted.length > 0) {
+      return { type: "string", enum: quoted.map((v) => v.replace(/^["']|["']$/g, "")) };
+    }
+  }
+  return { type: mapType(trimmed) };
+}
+
 export function generateOpenApi(contract: Contract, serverUrl = "/"): Record<string, unknown> {
   const enabledEndpoints = contract.endpoints.filter((ep) => ep.enabled);
+  const definableTypes = contract.generatedTypes.filter((t) => t.name !== "PaginatedResponse");
+  const knownTypes = new Set(definableTypes.map((t) => t.name));
+  const additionalSchemas: Record<string, unknown> = {};
 
   const paths: Record<string, Record<string, unknown>> = {};
 
   for (const ep of enabledEndpoints) {
     if (!paths[ep.path]) paths[ep.path] = {};
-    paths[ep.path][ep.method.toLowerCase()] = methodToOpenApi(ep, contract.annotations, contract.screens);
+    paths[ep.path][ep.method.toLowerCase()] = methodToOpenApi(ep, contract.annotations, contract.screens, knownTypes, additionalSchemas);
   }
 
   const spec: Record<string, unknown> = {
@@ -226,14 +202,18 @@ export function generateOpenApi(contract: Contract, serverUrl = "/"): Record<str
     paths,
   };
 
-  const definableTypes = contract.generatedTypes.filter(
-    (t) => t.name !== "PaginatedResponse"
-  );
-  if (definableTypes.length > 0) {
-    const schemas: Record<string, unknown> = {};
-    for (const t of definableTypes) {
-      schemas[t.name] = typeToJsonSchema(t);
+  // Merge schemas: explicit types + auto-created from inline items
+  const schemas: Record<string, unknown> = {};
+  for (const t of definableTypes) {
+    schemas[t.name] = typeToJsonSchema(t);
+  }
+  // Merge additional schemas (don't overwrite existing)
+  for (const [name, schema] of Object.entries(additionalSchemas)) {
+    if (!schemas[name]) {
+      schemas[name] = schema;
     }
+  }
+  if (Object.keys(schemas).length > 0) {
     spec.components = { schemas };
   }
 

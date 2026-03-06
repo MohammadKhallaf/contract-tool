@@ -1,11 +1,19 @@
 import type { GeneratedType, GeneratedSchema } from "@/types";
+import { isUnquotedEnum } from "./schema-utils";
 
 function typeToYup(tsType: string): string {
   const trimmed = tsType.trim();
-  // Detect string union enum: "active" | "inactive" | ...
+  // Quoted string union enum: "active" | "inactive"
   if (/^["']/.test(trimmed) || trimmed.includes('" | "') || trimmed.includes("' | '")) {
     const values = trimmed.match(/"([^"]+)"|'([^']+)'/g);
     if (values && values.length > 0) return `yup.mixed().oneOf([${values.join(", ")}])`;
+  }
+  // Unquoted pipe-separated enum: active | inactive | pending | in progress
+  if (trimmed.includes("|")) {
+    const parts = trimmed.split("|").map((s) => s.trim());
+    if (isUnquotedEnum(parts)) {
+      return `yup.mixed().oneOf([${parts.map((v) => `"${v}"`).join(", ")}])`;
+    }
   }
   const t = trimmed.toLowerCase();
   if (t === "string") return "yup.string()";
@@ -50,13 +58,7 @@ export function generateSchemas(
 
     const fields = parseInterfaceFields(type.code);
     if (fields.length === 0) {
-      result.push({
-        id: existingSchema?.id ?? crypto.randomUUID(),
-        name: schemaName,
-        code: `export const ${schemaName} = yup.object({\n  // TODO: define schema\n}).required();`,
-        linkedTypeId: type.id,
-        isEdited: false,
-      });
+      // Skip — no real fields (empty request, comment-only stub, type alias target)
       continue;
     }
 

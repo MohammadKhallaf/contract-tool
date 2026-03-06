@@ -39,7 +39,11 @@ export class ClaudeProvider implements AIProvider {
         text: buildAnalysisPrompt(
           request.jiraStory,
           request.existingPatterns ?? "",
-          request.screenContext
+          request.screenContext,
+          request.stackContext,
+          undefined,
+          undefined,
+          request.patternsContext
         ),
       },
     ];

@@ -52,17 +52,30 @@ export function buildAnalysisPrompt(
 Use these existing API patterns for naming consistency:
 ${existingPatterns || "No existing patterns provided."}
 ${stackContext ? `\nTech Stack:\n${stackContext}\n` : ""}${patternsContext ? `\nReusable patterns to follow (selected by developer):\n${patternsContext}\n` : ""}
-OpenAPI & TypeScript Best Practices (always follow these):
-- Use PascalCase for all schema/type names (e.g. CreateUserRequest, UserResponse)
-- Use camelCase for all property names
-- Separate request and response schemas — never reuse the same schema for both
-- Mark a property as required only if it is always present in every response/request
-- If a field can be null, note it as nullable (e.g. "deletedAt": "string | null")
-- For string enum fields, list the allowed values inline (e.g. "status": "active | inactive | pending")
-- For paginated endpoints, always set isPaginated: true and shape the response as { data: T[], total: number, offset: number, itemsPerPage: number }
-- Use clear operationId-style descriptions: verb + noun in camelCase (e.g. "getUser", "createInvoice", "listOrders")
-- Prefer explicit field names over generic shapes; avoid additionalProperties
-- For error responses, use the shape: { message: string, code: string }
+Schema rules (strictly follow these):
+- ALL field details belong in the schema string — never defer field information to the notes field
+- Schema values are TypeScript-style inline object literals: "{ field: type, field2?: type }"
+- Use camelCase for all property names, PascalCase for type names
+- Mark optional fields with "?" — only omit "?" for fields guaranteed present in every response
+- Nullable fields: "deletedAt?: string | null"
+- Date/time fields: always add an inline comment indicating the format — use "string /* ISO 8601 */" for ISO date strings or "number /* unix timestamp ms */" for timestamps. Examples:
+  "createdAt: string /* ISO 8601 */", "updatedAt?: string /* ISO 8601 */ | null", "expiresAt: number /* unix timestamp ms */"
+- Enum fields: write the exact allowed values pipe-separated as the type. NEVER use plain "string" when a finite set of values is known or can be reasonably inferred. Multi-word values are allowed. Examples:
+  "status: active | inactive | pending", "stage: in_progress | under_review | completed", "role: team lead | admin | viewer"
+- Common fields that MUST be enums (infer reasonable values from context):
+  sortOrder → "sortOrder?: asc | desc", sortBy → list the sortable field names e.g. "sortBy?: createdAt | name | updatedAt",
+  status/state → list all known states, type/kind/category → list all known variants
+- Nested objects: inline up to 2 levels deep:
+  "address: { street: string, city: string, zip: string }", "config: { smtp: { host: string, port: number }, enabled: boolean }"
+- Array fields: "tags: string[]" or for object arrays inline the item shape: "items: { id: string, name: string }[]"
+- For paginated endpoints set isPaginated: true and write the full envelope with all item fields inlined inside data:
+  "schema": "{ data: { id: string, name: string, status: active | inactive }[], total: number, offset: number, itemsPerPage: number }"
+- For request bodies inline all fields: "{ name: string, type?: draft | published, targetLeads?: number }"
+- NEVER use a bare type name as a schema (never write "schema": "CampaignResponse")
+- NEVER leave schema as just "{ success: boolean }" when the story implies a richer shape — infer all likely fields
+- notes is free-form context only: business rules, edge cases, auth notes. Do NOT list field names or types in notes.
+  Good: "Requires admin role. Returns 404 if campaign archived."
+  Bad: "id (string), name (string), status (active | inactive)" — this belongs in the schema
 
 JIRA Story:
 ${jiraStory}
@@ -75,10 +88,11 @@ Respond ONLY with valid JSON in this exact shape:
       "path": "/api/resource/{id}",
       "description": "What this endpoint does",
       "pathParams": [{ "name": "id", "type": "string", "required": true }],
-      "queryParams": [],
-      "requestBody": { "contentType": "application/json", "schema": "{ id: string }" },
-      "responseBody": { "statusCode": 200, "schema": "{ success: boolean }", "isPaginated": false },
-      "notes": "Any important notes"
+      "queryParams": [{ "name": "sortOrder", "type": "asc | desc", "required": false }, { "name": "status", "type": "active | inactive | pending", "required": false }],
+      "headers": [{ "name": "Authorization", "value": "Bearer <token>", "required": true }],
+      "requestBody": { "contentType": "application/json", "schema": "{ name: string, status: draft | published }" },
+      "responseBody": { "statusCode": 200, "schema": "{ id: string, name: string, status: active | inactive, createdAt: string }", "isPaginated": false },
+      "notes": "Optional business context only — no field listings"
     }
   ],
   "reasoning": "Brief explanation of why these endpoints were chosen"

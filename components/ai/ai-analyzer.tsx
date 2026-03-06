@@ -168,7 +168,7 @@ export function AIAnalyzer() {
       return;
     }
 
-    const { jiraStory, screenDataUrls, existingPatterns, screenContext } = buildPayload(contract, specs, includeTypesInPrompt, patternSelections);
+    const { jiraStory, screenDataUrls, existingPatterns, screenContext, stackContext, patternsContext } = buildPayload(contract, specs, includeTypesInPrompt, patternSelections);
     const primaryModel = model || (aiProvider === "claude" ? "claude-sonnet-4-6" : aiProvider === "openai" ? "gpt-4o" : "Claude-Sonnet-4.5");
 
     try {
@@ -196,6 +196,8 @@ export function AIAnalyzer() {
           screenDataUrls: [], // already described in text
           existingPatterns,
           screenContext: enrichedScreenContext || undefined,
+          stackContext: stackContext || undefined,
+          patternsContext,
         });
 
         setStep("done");
@@ -221,6 +223,8 @@ export function AIAnalyzer() {
           screenDataUrls,
           existingPatterns,
           screenContext: screenContext || undefined,
+          stackContext: stackContext || undefined,
+          patternsContext,
         });
 
         setStep("done");
