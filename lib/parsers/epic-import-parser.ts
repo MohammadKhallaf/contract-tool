@@ -69,7 +69,8 @@ export function parseEpicMarkdown(text: string): JiraStory[] {
       stories.push({
         key: current.key,
         title: current.title,
-        description: current.description ?? descLines.join("\n").trim(),
+        // FIXED: Join all accumulated lines for the description
+        description: descLines.join("\n").trim(),
         labels: current.labels ?? [],
         acceptanceCriteria: [],
       });
@@ -99,15 +100,23 @@ export function parseEpicMarkdown(text: string): JiraStory[] {
       continue;
     }
 
+    // FIXED: Instead of setting current.description, push the text into descLines
     const descMatch = line.match(/^Description:\s*(.*)$/i);
     if (descMatch) {
-      current.description = descMatch[1].trim();
+      const inlineDescText = descMatch[1].trim();
+      if (inlineDescText) {
+        descLines.push(inlineDescText);
+      }
       continue;
     }
 
     // Collect remaining non-empty lines as extra description context
     if (line.trim() && !line.match(/^Assignee:/i)) {
-      descLines.push(line.trim());
+      // Optional: Strip out the triple backticks if you used the updated exporter from earlier
+      const cleanLine = line.replace(/^```$/, "").trim();
+      if (cleanLine) {
+        descLines.push(cleanLine);
+      }
     }
   }
 
