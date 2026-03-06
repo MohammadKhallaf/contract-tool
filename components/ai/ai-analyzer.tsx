@@ -1,13 +1,14 @@
 "use client";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Sparkles, Loader2, Eye } from "lucide-react";
+import { Sparkles, Loader2, Eye, Layers, ChevronDown } from "lucide-react";
 import { useContractStore } from "@/stores/contract-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useSpecsStore } from "@/stores/specs-store";
@@ -18,13 +19,16 @@ import { buildAnalysisPrompt } from "@/lib/ai/prompts";
 import { serializeJiraStory } from "@/lib/parsers/jira-parser";
 import { generateTypes } from "@/lib/generators/type-generator";
 import { generateSchemas } from "@/lib/generators/schema-generator";
+import { extractPatterns } from "@/lib/specs/pattern-extractor";
+import { PatternPicker } from "@/components/ai/pattern-picker";
 import { toast } from "sonner";
 import type { Contract } from "@/types";
 
 function buildPayload(
   contract: Contract,
   specs: ReturnType<typeof useSpecsStore.getState>["specs"],
-  includeTypesInPrompt: boolean
+  includeTypesInPrompt: boolean,
+  patternSelections: ReturnType<typeof useSettingsStore.getState>["patternSelections"]
 ) {
   const jiraStory = contract.jiraStories.length > 0
     ? contract.jiraStories.map((s) => serializeJiraStory(s)).join("\n\n---\n\n")
@@ -36,6 +40,19 @@ function buildPayload(
     .flatMap((spec) => spec.endpoints.slice(0, 5))
     .map((ep) => `${ep.method} ${ep.path}${ep.summary ? ` — ${ep.summary}` : ""}`)
     .join("\n");
+
+  const allPatterns = extractPatterns(Object.values(specs));
+  const patternsContext = allPatterns
+    .filter((p) => {
+      const sel = patternSelections[p.id];
+      return sel ? sel.enabled : p.enabled;
+    })
+    .map((p) => {
+      const sel = patternSelections[p.id];
+      const weight = sel ? sel.weight : p.weight;
+      return weight < 0.5 ? `(optional) ${p.promptSnippet}` : p.promptSnippet;
+    })
+    .join("\n") || undefined;
 
   const screenContext = contract.screens
     .map((sc, idx) => {
@@ -92,10 +109,11 @@ function buildPayload(
     screenContext || undefined,
     stackContext || undefined,
     combinedTypesContext,
-    devFeedback || undefined
+    devFeedback || undefined,
+    patternsContext
   );
 
-  return { jiraStory, screenDataUrls, existingPatterns, screenContext, stackContext, devFeedback, prompt };
+  return { jiraStory, screenDataUrls, existingPatterns, screenContext, stackContext, devFeedback, patternsContext, allPatterns, prompt };
 }
 
 type Step = "idle" | "describing" | "generating" | "loading" | "done";
@@ -122,11 +140,12 @@ export function AIAnalyzer() {
   const addEndpoints = useContractStore((s) => s.addEndpoints);
   const setGeneratedTypes = useContractStore((s) => s.setGeneratedTypes);
   const setGeneratedSchemas = useContractStore((s) => s.setGeneratedSchemas);
-  const { aiProvider, apiKey, model, textModel, includeTypesInPrompt } = useSettingsStore();
+  const { aiProvider, apiKey, model, textModel, includeTypesInPrompt, patternSelections } = useSettingsStore();
   const specs = useSpecsStore((s) => s.specs);
+  const [patternPickerOpen, setPatternPickerOpen] = useState(false);
 
   const loading = step === "describing" || step === "generating" || step === "loading";
-  const payload = contract ? buildPayload(contract, specs, includeTypesInPrompt) : null;
+  const payload = contract ? buildPayload(contract, specs, includeTypesInPrompt, patternSelections) : null;
 
   function addEndpointsAndRefresh(eps: Parameters<typeof addEndpoints>[0]) {
     addEndpoints(eps);
@@ -149,7 +168,7 @@ export function AIAnalyzer() {
       return;
     }
 
-    const { jiraStory, screenDataUrls, existingPatterns, screenContext } = buildPayload(contract, specs, includeTypesInPrompt);
+    const { jiraStory, screenDataUrls, existingPatterns, screenContext } = buildPayload(contract, specs, includeTypesInPrompt, patternSelections);
     const primaryModel = model || (aiProvider === "claude" ? "claude-sonnet-4-6" : aiProvider === "openai" ? "gpt-4o" : "Claude-Sonnet-4.5");
 
     try {
@@ -296,6 +315,30 @@ export function AIAnalyzer() {
                   <p className="text-xs text-foreground">{payload.stackContext}</p>
                 </div>
               )}
+
+              {/* Spec patterns */}
+              <div className="rounded-md border p-3 space-y-2">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setPatternPickerOpen((o) => !o)}
+                >
+                  <span className="flex items-center gap-2">
+                    <Layers className="h-3.5 w-3.5" />
+                    Spec Patterns
+                    {payload.allPatterns.length > 0 && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal normal-case tracking-normal">
+                        {payload.allPatterns.filter((p) => {
+                          const sel = patternSelections[p.id];
+                          return sel ? sel.enabled : p.enabled;
+                        }).length} / {payload.allPatterns.length}
+                      </Badge>
+                    )}
+                  </span>
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${patternPickerOpen ? "rotate-180" : ""}`} />
+                </button>
+                {patternPickerOpen && <PatternPicker />}
+              </div>
 
               {/* Dev feedback */}
               {payload.devFeedback && (

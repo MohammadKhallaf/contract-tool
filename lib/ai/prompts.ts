@@ -15,13 +15,14 @@ export function buildAnalysisPrompt(
   screenContext?: string,
   stackContext?: string,
   typesContext?: string,
-  devFeedback?: string
+  devFeedback?: string,
+  patternsContext?: string
 ): string {
   return `You are an API contract generator. Analyze the JIRA story below and suggest API endpoints needed.
 
 Use these existing API patterns for naming consistency:
 ${existingPatterns || "No existing patterns provided."}
-${stackContext ? `\nTech Stack:\n${stackContext}\n` : ""}
+${stackContext ? `\nTech Stack:\n${stackContext}\n` : ""}${patternsContext ? `\nReusable patterns to follow (selected by developer):\n${patternsContext}\n` : ""}
 JIRA Story:
 ${jiraStory}
 ${screenContext ? `\nScreen Annotations & Notes:\n${screenContext}\n` : ""}${typesContext ? `\n${typesContext}\n` : ""}${devFeedback ? `\nDeveloper Feedback on Previous Output (address these issues):\n${devFeedback}\n` : ""}
