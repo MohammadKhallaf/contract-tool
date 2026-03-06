@@ -8,7 +8,6 @@ interface Props {
   annotation: Annotation;
   isHighlighted: boolean;
   scale: number;
-  onMove: (id: string, x: number, y: number) => void;
   onClick: (id: string, endpointId?: string) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }
@@ -17,7 +16,6 @@ export function AnnotationMarker({
   annotation,
   isHighlighted,
   scale,
-  onMove,
   onClick,
   containerRef,
 }: Props) {

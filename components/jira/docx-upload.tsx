@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useRef, useState } from "react";
-import { FileText, Upload, Loader2, AlertCircle, Image } from "lucide-react";
+import { FileText, Upload, Loader2, AlertCircle, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -157,7 +157,7 @@ export function DocxUpload({ onParsed }: Props) {
               {extracted.text.length.toLocaleString()} chars
               {extracted.imageDataUrls.length > 0 && (
                 <span className="ml-2 inline-flex items-center gap-1">
-                  <Image className="h-3 w-3" />
+                  <ImageIcon className="h-3 w-3" />
                   {extracted.imageDataUrls.length} image{extracted.imageDataUrls.length !== 1 ? "s" : ""}
                 </span>
               )}

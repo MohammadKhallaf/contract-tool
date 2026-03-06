@@ -21,7 +21,7 @@ import { AIAnalyzer } from "@/components/ai/ai-analyzer";
 import { ErdView } from "@/components/erd/erd-view";
 import { Save, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { useContractSave } from "@/hooks/use-contract";
+import { useContractSave, loadContractById } from "@/hooks/use-contract";
 
 export default function ContractPage() {
   const { id } = useParams<{ id: string }>();
@@ -36,24 +36,30 @@ export default function ContractPage() {
 
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(contract?.name ?? "");
+  // Hydration guard: don't redirect until Zustand has rehydrated from localStorage
+  const [hydrated, setHydrated] = useState(false);
 
-  // If contract id doesn't match currently loaded, redirect to dashboard
   useEffect(() => {
-    if (contract && contract.id !== id) {
-      router.push("/");
+    // If the store already has the right contract (e.g. just created), mark hydrated immediately.
+    // Otherwise try loading from per-id storage, then mark hydrated.
+    if (contract?.id === id) {
+      setHydrated(true);
+      return;
     }
-    if (!contract) {
-      // Check if this contract exists in the list (already saved)
+    const loaded = loadContractById(id);
+    if (!loaded) {
+      // Not in per-id storage — check if it exists in the list at all
       const exists = contractsList.find((c) => c.id === id);
-      if (!exists) router.push("/");
+      if (!exists) {
+        router.push("/");
+        return;
+      }
     }
-  }, [contract, id, router, contractsList]);
+    setHydrated(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
-  useEffect(() => {
-    if (contract) setNameValue(contract.name);
-  }, [contract]);
-
-  if (!contract || contract.id !== id) {
+  if (!hydrated || !contract || contract.id !== id) {
     return (
       <div className="min-h-screen flex items-center justify-center text-muted-foreground">
         Loading...
@@ -98,7 +104,7 @@ export default function ContractPage() {
         ) : (
           <button
             className="text-sm font-semibold hover:text-primary transition-colors"
-            onClick={() => setEditingName(true)}
+            onClick={() => { setNameValue(contract.name); setEditingName(true); }}
           >
             {contract.name}
           </button>

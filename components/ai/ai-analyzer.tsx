@@ -16,6 +16,8 @@ import { OpenAIProvider } from "@/lib/ai/openai-provider";
 import { PoeProvider } from "@/lib/ai/poe-provider";
 import { buildAnalysisPrompt } from "@/lib/ai/prompts";
 import { serializeJiraStory } from "@/lib/parsers/jira-parser";
+import { generateTypes } from "@/lib/generators/type-generator";
+import { generateSchemas } from "@/lib/generators/schema-generator";
 import { toast } from "sonner";
 import type { Contract } from "@/types";
 
@@ -79,15 +81,21 @@ function buildPayload(
 
   const combinedTypesContext = [typesContext, schemasContext].filter(Boolean).join("\n") || undefined;
 
+  const devFeedback = contract.endpoints
+    .filter((ep) => ep.devComment)
+    .map((ep) => `  ${ep.method} ${ep.path}: "${ep.devComment}"`)
+    .join("\n");
+
   const prompt = buildAnalysisPrompt(
     jiraStory,
     existingPatterns,
     screenContext || undefined,
     stackContext || undefined,
-    combinedTypesContext
+    combinedTypesContext,
+    devFeedback || undefined
   );
 
-  return { jiraStory, screenDataUrls, existingPatterns, screenContext, stackContext, prompt };
+  return { jiraStory, screenDataUrls, existingPatterns, screenContext, stackContext, devFeedback, prompt };
 }
 
 type Step = "idle" | "describing" | "generating" | "loading" | "done";
@@ -112,11 +120,24 @@ export function AIAnalyzer() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const contract = useContractStore((s) => s.contract);
   const addEndpoints = useContractStore((s) => s.addEndpoints);
+  const setGeneratedTypes = useContractStore((s) => s.setGeneratedTypes);
+  const setGeneratedSchemas = useContractStore((s) => s.setGeneratedSchemas);
   const { aiProvider, apiKey, model, textModel, includeTypesInPrompt } = useSettingsStore();
   const specs = useSpecsStore((s) => s.specs);
 
   const loading = step === "describing" || step === "generating" || step === "loading";
   const payload = contract ? buildPayload(contract, specs, includeTypesInPrompt) : null;
+
+  function addEndpointsAndRefresh(eps: Parameters<typeof addEndpoints>[0]) {
+    addEndpoints(eps);
+    // Read the updated contract immediately (Zustand updates synchronously)
+    const updated = useContractStore.getState().contract;
+    if (!updated) return;
+    const newTypes = generateTypes(updated.endpoints, updated.generatedTypes);
+    setGeneratedTypes(newTypes);
+    const newSchemas = generateSchemas(newTypes, updated.generatedSchemas);
+    setGeneratedSchemas(newSchemas);
+  }
 
   async function analyze() {
     if (!contract || !apiKey) {
@@ -161,7 +182,7 @@ export function AIAnalyzer() {
         setStep("done");
 
         if (result.endpoints.length > 0) {
-          addEndpoints(result.endpoints);
+          addEndpointsAndRefresh(result.endpoints);
           toast.success(
             screenDataUrls.length > 0
               ? `${result.endpoints.length} endpoint(s) added (2-step: vision → text model)`
@@ -186,7 +207,7 @@ export function AIAnalyzer() {
         setStep("done");
 
         if (result.endpoints.length > 0) {
-          addEndpoints(result.endpoints);
+          addEndpointsAndRefresh(result.endpoints);
           toast.success(`${result.endpoints.length} endpoint(s) added`);
         } else {
           toast.warning("AI returned no endpoints. Check your API key and story.");
@@ -240,7 +261,7 @@ export function AIAnalyzer() {
             <DialogTitle>AI Prompt Preview</DialogTitle>
           </DialogHeader>
 
-          {payload && (
+          {payload && contract && (
             <div className="flex-1 overflow-y-auto space-y-4 text-sm">
               {/* Images summary */}
               <div className="rounded-md border p-3 space-y-1">
@@ -251,20 +272,17 @@ export function AIAnalyzer() {
                   <p className="text-muted-foreground">No screens uploaded</p>
                 ) : (
                   <ul className="space-y-1">
-                    {payload.screenDataUrls.map((_, i) => {
-                      const screen = contract!.screens[i];
-                      return (
-                        <li key={i} className="flex items-center gap-2">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={screen.dataUrl}
-                            alt={screen.name}
-                            className="h-8 w-12 object-cover rounded border"
-                          />
-                          <span className="text-muted-foreground">{screen.name}</span>
-                        </li>
-                      );
-                    })}
+                    {contract.screens.map((screen) => (
+                      <li key={screen.id} className="flex items-center gap-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={screen.dataUrl}
+                          alt={screen.name}
+                          className="h-8 w-12 object-cover rounded border"
+                        />
+                        <span className="text-muted-foreground">{screen.name}</span>
+                      </li>
+                    ))}
                   </ul>
                 )}
               </div>
@@ -276,6 +294,18 @@ export function AIAnalyzer() {
                     Tech Stack
                   </p>
                   <p className="text-xs text-foreground">{payload.stackContext}</p>
+                </div>
+              )}
+
+              {/* Dev feedback */}
+              {payload.devFeedback && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-50/30 dark:bg-amber-950/20 p-3 space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                    Developer Feedback (regression context)
+                  </p>
+                  <pre className="whitespace-pre-wrap font-mono text-xs text-foreground">
+                    {payload.devFeedback}
+                  </pre>
                 </div>
               )}
 

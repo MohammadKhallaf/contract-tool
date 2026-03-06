@@ -1,51 +1,5 @@
 import type { Contract } from "@/types";
 
-function toYamlValue(value: unknown, indent = 0): string {
-  const pad = " ".repeat(indent);
-  if (value === null || value === undefined) return "null";
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "number") return String(value);
-  if (typeof value === "string") {
-    if (value.includes("\n") || value.includes(":") || value.includes("#") || value.startsWith(" ")) {
-      const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-      return `"${escaped}"`;
-    }
-    return value || '""';
-  }
-  if (Array.isArray(value)) {
-    if (value.length === 0) return "[]";
-    return "\n" + value.map((v) => `${pad}- ${toYamlValue(v, indent + 2)}`).join("\n");
-  }
-  if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).filter(
-      ([, v]) => v !== undefined && v !== null
-    );
-    if (entries.length === 0) return "{}";
-    return (
-      "\n" +
-      entries
-        .map(([k, v]) => {
-          const rendered = toYamlValue(v, indent + 2);
-          const isBlock = rendered.startsWith("\n");
-          return `${pad}${k}:${isBlock ? rendered : " " + rendered}`;
-        })
-        .join("\n")
-    );
-  }
-  return String(value);
-}
-
-function renderYamlObject(obj: Record<string, unknown>, indent = 0): string {
-  const pad = " ".repeat(indent);
-  const lines: string[] = [];
-  for (const [k, v] of Object.entries(obj)) {
-    if (v === undefined || v === null) continue;
-    const rendered = toYamlValue(v, indent + 2);
-    const isBlock = rendered.startsWith("\n");
-    lines.push(`${pad}${k}:${isBlock ? rendered : " " + rendered}`);
-  }
-  return lines.join("\n");
-}
 
 export function generateYaml(contract: Contract): string {
   const enabledEndpoints = contract.endpoints.filter((ep) => ep.enabled);

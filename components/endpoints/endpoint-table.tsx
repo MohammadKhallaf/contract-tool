@@ -67,6 +67,7 @@ export function EndpointTable() {
               onToggle={() => toggleEndpoint(ep.id)}
               onEdit={() => openEdit(ep)}
               onDelete={() => removeEndpoint(ep.id)}
+              onComment={(comment) => updateEndpoint(ep.id, { devComment: comment || undefined })}
             />
           ))}
         </div>

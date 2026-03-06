@@ -117,5 +117,13 @@ export function generateTypes(
     }
   }
 
-  return result;
+  // Deduplicate: keep first occurrence by name AND by id
+  const seenNames = new Set<string>();
+  const seenIds = new Set<string>();
+  return result.filter((t) => {
+    if (seenNames.has(t.name) || seenIds.has(t.id)) return false;
+    seenNames.add(t.name);
+    seenIds.add(t.id);
+    return true;
+  });
 }

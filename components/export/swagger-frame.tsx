@@ -1,6 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 const HTML_TEMPLATE = `<!DOCTYPE html><html><head>
   <meta charset="utf-8"/>
@@ -27,23 +26,21 @@ interface SwaggerFrameProps {
 }
 
 export function SwaggerFrame({ spec }: SwaggerFrameProps) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  // Track the previous blob URL so we can revoke it when spec changes
+  const prevUrl = useRef<string | null>(null);
 
+  const html = HTML_TEMPLATE.replace("__SPEC__", JSON.stringify(spec));
+  const blob = new Blob([html], { type: "text/html" });
+  const blobUrl = URL.createObjectURL(blob);
+
+  // Revoke the previous URL after the new one has been assigned
   useEffect(() => {
-    const html = HTML_TEMPLATE.replace("__SPEC__", JSON.stringify(spec));
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    setBlobUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [spec]);
-
-  if (!blobUrl) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+    const old = prevUrl.current;
+    prevUrl.current = blobUrl;
+    return () => {
+      if (old) URL.revokeObjectURL(old);
+    };
+  });
 
   return (
     <iframe

@@ -112,7 +112,6 @@ export function AnnotationLayer({ screenId, scale }: Props) {
           annotation={ann}
           isHighlighted={highlightedId === ann.id}
           scale={scale}
-          onMove={moveAnnotation}
           onClick={clickMarker}
           containerRef={containerRef}
         />

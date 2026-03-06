@@ -36,6 +36,7 @@ export interface Endpoint {
   requestBody?: RequestBodyDefinition;
   responseBody?: ResponseBodyDefinition;
   notes?: string;
+  devComment?: string;  // developer feedback on AI output — included in next AI analysis for regression
   linkedScreenIds: string[];
   confidence?: ConfidenceInfo;
   isAiGenerated: boolean;

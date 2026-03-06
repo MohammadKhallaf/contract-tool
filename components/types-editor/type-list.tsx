@@ -54,7 +54,7 @@ export function TypeList() {
       {types.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <p className="text-sm">No types generated yet.</p>
-          <p className="text-xs mt-1">Add endpoints first, then click Regenerate.</p>
+          <p className="text-xs mt-1">Add endpoints (manually or via AI), then click Regenerate. You can do this incrementally — no need to have all screens ready.</p>
         </div>
       ) : (
         <div className="space-y-4">

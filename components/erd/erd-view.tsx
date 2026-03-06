@@ -36,12 +36,18 @@ export function ErdView() {
 
   const allTypeNames = types.map((t) => t.name);
 
+  const edgeSet = new Set<string>();
   const edges: Edge[] = types.flatMap((type) =>
     extractRefs(type.code, type.name, allTypeNames).map((refName) => {
       const target = types.find((t) => t.name === refName);
       return target ? { sourceId: type.id, targetId: target.id } : null;
     }).filter(Boolean) as Edge[]
-  );
+  ).filter((edge) => {
+    const key = `${edge.sourceId}-${edge.targetId}`;
+    if (edgeSet.has(key)) return false;
+    edgeSet.add(key);
+    return true;
+  });
 
   function handleReset(id: string) {
     if (!contract) return;

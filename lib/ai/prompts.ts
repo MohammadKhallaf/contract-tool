@@ -14,7 +14,8 @@ export function buildAnalysisPrompt(
   existingPatterns: string,
   screenContext?: string,
   stackContext?: string,
-  typesContext?: string
+  typesContext?: string,
+  devFeedback?: string
 ): string {
   return `You are an API contract generator. Analyze the JIRA story below and suggest API endpoints needed.
 
@@ -23,7 +24,7 @@ ${existingPatterns || "No existing patterns provided."}
 ${stackContext ? `\nTech Stack:\n${stackContext}\n` : ""}
 JIRA Story:
 ${jiraStory}
-${screenContext ? `\nScreen Annotations & Notes:\n${screenContext}\n` : ""}${typesContext ? `\n${typesContext}\n` : ""}
+${screenContext ? `\nScreen Annotations & Notes:\n${screenContext}\n` : ""}${typesContext ? `\n${typesContext}\n` : ""}${devFeedback ? `\nDeveloper Feedback on Previous Output (address these issues):\n${devFeedback}\n` : ""}
 Respond ONLY with valid JSON in this exact shape:
 {
   "endpoints": [

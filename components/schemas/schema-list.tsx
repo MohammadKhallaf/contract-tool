@@ -60,7 +60,7 @@ export function SchemaList() {
       {schemas.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <p className="text-sm">No schemas generated yet.</p>
-          <p className="text-xs mt-1">Generate types first, then click Regenerate.</p>
+          <p className="text-xs mt-1">Generate types first, then click Regenerate. Works incrementally — add more screens/endpoints later and regenerate again.</p>
         </div>
       ) : (
         <div className="space-y-4">

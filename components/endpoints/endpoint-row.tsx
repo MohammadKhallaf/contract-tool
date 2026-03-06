@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { ChevronDown, ChevronRight, MessageSquare, Pencil, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceBadge } from "./confidence-badge";
 import { EndpointDetail } from "./endpoint-detail";
@@ -23,6 +24,7 @@ interface Props {
   onToggle: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onComment: (comment: string) => void;
 }
 
 export function EndpointRow({
@@ -31,8 +33,24 @@ export function EndpointRow({
   onToggle,
   onEdit,
   onDelete,
+  onComment,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [commentOpen, setCommentOpen] = useState(false);
+  const [draft, setDraft] = useState(endpoint.devComment ?? "");
+
+  const hasComment = Boolean(endpoint.devComment);
+
+  function saveComment() {
+    onComment(draft.trim());
+    setCommentOpen(false);
+  }
+
+  function clearComment() {
+    setDraft("");
+    onComment("");
+    setCommentOpen(false);
+  }
 
   return (
     <div
@@ -71,6 +89,9 @@ export function EndpointRow({
           {endpoint.isAiGenerated && (
             <Badge variant="secondary" className="text-[10px]">AI</Badge>
           )}
+          {hasComment && (
+            <MessageSquare className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+          )}
           {expanded ? (
             <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
           ) : (
@@ -78,6 +99,15 @@ export function EndpointRow({
           )}
         </button>
         <div className="flex gap-1">
+          <Button
+            size="icon"
+            variant="ghost"
+            className={cn("h-7 w-7", hasComment && "text-amber-500")}
+            title="Dev comment (included in next AI analysis)"
+            onClick={(e) => { e.stopPropagation(); setDraft(endpoint.devComment ?? ""); setCommentOpen((o) => !o); }}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+          </Button>
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onEdit}>
             <Pencil className="h-3.5 w-3.5" />
           </Button>
@@ -91,6 +121,31 @@ export function EndpointRow({
           </Button>
         </div>
       </div>
+
+      {commentOpen && (
+        <div className="border-t bg-amber-50/50 dark:bg-amber-950/20 px-3 py-2 space-y-2">
+          <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+            Dev feedback — included in next AI analysis for refinement
+          </p>
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="e.g. This endpoint needs pagination, response schema is wrong, method should be PATCH..."
+            className="text-xs h-20 resize-none"
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <Button size="sm" className="h-7 text-xs" onClick={saveComment}>Save</Button>
+            {hasComment && (
+              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground" onClick={clearComment}>
+                <X className="h-3 w-3" /> Clear
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setCommentOpen(false)}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
       {expanded && <EndpointDetail endpoint={endpoint} />}
     </div>
   );

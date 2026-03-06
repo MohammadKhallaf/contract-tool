@@ -73,5 +73,13 @@ export function generateSchemas(
     });
   }
 
-  return result;
+  // Deduplicate by name and id
+  const seenNames = new Set<string>();
+  const seenIds = new Set<string>();
+  return result.filter((s) => {
+    if (seenNames.has(s.name) || seenIds.has(s.id)) return false;
+    seenNames.add(s.name);
+    seenIds.add(s.id);
+    return true;
+  });
 }

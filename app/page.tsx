@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useContractsListStore } from "@/stores/contracts-list-store";
 import { useContractStore } from "@/stores/contract-store";
-import { useContractSave } from "@/hooks/use-contract";
+import { useContractSave, loadContractById } from "@/hooks/use-contract";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +34,7 @@ export default function DashboardPage() {
   }
 
   function handleOpen(id: string) {
+    loadContractById(id);
     router.push(`/contract/${id}`);
   }
 
