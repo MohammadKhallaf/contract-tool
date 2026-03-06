@@ -43,8 +43,7 @@ function methodToOpenApi(ep: Endpoint, annotations: Annotation[], screens: Scree
   if (parameters.length === 0) delete operation.parameters;
 
   if (ep.requestBody) {
-    let schemaObj: unknown = { type: "object" };
-    try { schemaObj = JSON.parse(ep.requestBody.schema); } catch { /* keep default */ }
+    const schemaObj = schemaStringToJsonSchema(ep.requestBody.schema);
     operation.requestBody = {
       required: true,
       content: {
@@ -56,7 +55,7 @@ function methodToOpenApi(ep: Endpoint, annotations: Annotation[], screens: Scree
   const statusCode = ep.responseBody?.statusCode ?? 200;
   let responseSchema: unknown = { type: "object" };
   if (ep.responseBody) {
-    try { responseSchema = JSON.parse(ep.responseBody.schema); } catch { /* keep default */ }
+    responseSchema = schemaStringToJsonSchema(ep.responseBody.schema);
     if (ep.responseBody.isPaginated) {
       responseSchema = {
         type: "object",
@@ -88,12 +87,63 @@ function methodToOpenApi(ep: Endpoint, annotations: Annotation[], screens: Scree
 function parseInterfaceFields(code: string): { name: string; type: string; required: boolean }[] {
   const fields: { name: string; type: string; required: boolean }[] = [];
   for (const line of code.split("\n")) {
+    // Skip comment lines
+    if (line.trim().startsWith("//")) continue;
     const m = line.match(/^\s+(\w+)(\?)?\s*:\s*(.+?);?\s*$/);
-    if (m && !m[1].startsWith("//")) {
+    if (m) {
       fields.push({ name: m[1], type: m[3].trim(), required: !m[2] });
     }
   }
   return fields;
+}
+
+/** Parse a TypeScript/JS object literal like "{ id: string, name?: string }" into JSON schema fields */
+function parseTsObjectLiteral(schema: string): { name: string; type: string; required: boolean }[] {
+  const fields: { name: string; type: string; required: boolean }[] = [];
+  // Strip outer braces and split by comma (simple, non-nested)
+  const inner = schema.trim().replace(/^\{|\}$/g, "").trim();
+  if (!inner) return fields;
+  // Split on commas not inside brackets
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of inner) {
+    if (ch === "{" || ch === "[" || ch === "(") depth++;
+    else if (ch === "}" || ch === "]" || ch === ")") depth--;
+    else if (ch === "," && depth === 0) { parts.push(current); current = ""; continue; }
+    current += ch;
+  }
+  if (current.trim()) parts.push(current);
+  for (const part of parts) {
+    const m = part.trim().match(/^(\w+)(\?)?\s*:\s*(.+)$/);
+    if (m) fields.push({ name: m[1], type: m[3].trim(), required: !m[2] });
+  }
+  return fields;
+}
+
+/** Convert a schema string (TS object literal OR JSON) into a JSON Schema object */
+function schemaStringToJsonSchema(schema: string): Record<string, unknown> {
+  if (!schema || !schema.trim()) return { type: "object" };
+  // Try JSON parse first
+  try {
+    const parsed = JSON.parse(schema);
+    if (typeof parsed === "object" && parsed !== null) return parsed as Record<string, unknown>;
+  } catch { /* fall through */ }
+  // Try TS object literal
+  const fields = parseTsObjectLiteral(schema);
+  if (fields.length > 0) {
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+    for (const f of fields) {
+      properties[f.name] = tsTypeToJsonSchema(f.type);
+      if (f.required) required.push(f.name);
+    }
+    const result: Record<string, unknown> = { type: "object", properties };
+    if (required.length > 0) result.required = required;
+    return result;
+  }
+  // Fallback — treat as description
+  return { type: "object", description: schema.slice(0, 120) };
 }
 
 function tsTypeToJsonSchema(tsType: string): Record<string, unknown> {
@@ -109,18 +159,23 @@ function tsTypeToJsonSchema(tsType: string): Record<string, unknown> {
 
 function typeToJsonSchema(type: GeneratedType): Record<string, unknown> {
   const fields = parseInterfaceFields(type.code);
-  if (fields.length === 0) {
-    return { type: "object", description: type.name };
+  if (fields.length > 0) {
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+    for (const f of fields) {
+      properties[f.name] = tsTypeToJsonSchema(f.type);
+      if (f.required) required.push(f.name);
+    }
+    const schema: Record<string, unknown> = { type: "object", properties };
+    if (required.length > 0) schema.required = required;
+    return schema;
   }
-  const properties: Record<string, unknown> = {};
-  const required: string[] = [];
-  for (const f of fields) {
-    properties[f.name] = tsTypeToJsonSchema(f.type);
-    if (f.required) required.push(f.name);
+  // Try extracting schema hint from comments like "// Schema hint: { id: string }"
+  const hintMatch = type.code.match(/\/\/\s*(?:Schema hint|Define schema):\s*(.+)/);
+  if (hintMatch) {
+    return schemaStringToJsonSchema(hintMatch[1].trim());
   }
-  const schema: Record<string, unknown> = { type: "object", properties };
-  if (required.length > 0) schema.required = required;
-  return schema;
+  return { type: "object", description: type.name };
 }
 
 function mapType(t: string): string {
@@ -131,7 +186,7 @@ function mapType(t: string): string {
   return "string";
 }
 
-export function generateOpenApi(contract: Contract): Record<string, unknown> {
+export function generateOpenApi(contract: Contract, serverUrl = "/"): Record<string, unknown> {
   const enabledEndpoints = contract.endpoints.filter((ep) => ep.enabled);
 
   const paths: Record<string, Record<string, unknown>> = {};
@@ -150,6 +205,7 @@ export function generateOpenApi(contract: Contract): Record<string, unknown> {
         ? contract.jiraStories.map((s) => `${s.key ? s.key + ": " : ""}${s.title}`).join(" | ")
         : contract.name,
     },
+    servers: [{ url: serverUrl, description: "Current server" }],
     paths,
   };
 

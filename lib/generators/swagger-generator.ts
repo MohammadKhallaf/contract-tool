@@ -52,17 +52,11 @@ function methodToSwagger(ep: Endpoint): Record<string, unknown> {
   });
 
   if (ep.requestBody) {
-    let schemaObj: unknown = { type: "object" };
-    try {
-      schemaObj = JSON.parse(ep.requestBody.schema);
-    } catch {
-      /* keep default */
-    }
     parameters.push({
       name: "body",
       in: "body",
       required: true,
-      schema: schemaObj,
+      schema: schemaStringToJsonSchema(ep.requestBody.schema),
     });
   }
 
@@ -71,11 +65,7 @@ function methodToSwagger(ep: Endpoint): Record<string, unknown> {
   const statusCode = ep.responseBody?.statusCode ?? 200;
   let responseSchema: unknown = { type: "object" };
   if (ep.responseBody) {
-    try {
-      responseSchema = JSON.parse(ep.responseBody.schema);
-    } catch {
-      /* keep default */
-    }
+    responseSchema = schemaStringToJsonSchema(ep.responseBody.schema);
     if (ep.responseBody.isPaginated) {
       responseSchema = {
         type: "object",
@@ -99,27 +89,28 @@ function methodToSwagger(ep: Endpoint): Record<string, unknown> {
 
 function typeToJsonSchema(type: GeneratedType): Record<string, unknown> {
   const fields = parseInterfaceFields(type.code);
-  if (fields.length === 0) {
-    return { type: "object", description: type.name };
+  if (fields.length > 0) {
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+    for (const f of fields) {
+      properties[f.name] = tsTypeToJsonSchema(f.type);
+      if (f.required) required.push(f.name);
+    }
+    const schema: Record<string, unknown> = { type: "object", properties };
+    if (required.length > 0) schema.required = required;
+    return schema;
   }
-  const properties: Record<string, unknown> = {};
-  const required: string[] = [];
-  for (const f of fields) {
-    properties[f.name] = tsTypeToJsonSchema(f.type);
-    if (f.required) required.push(f.name);
-  }
-  const schema: Record<string, unknown> = { type: "object", properties };
-  if (required.length > 0) schema.required = required;
-  return schema;
+  const hintMatch = type.code.match(/\/\/\s*(?:Schema hint|Define schema):\s*(.+)/);
+  if (hintMatch) return schemaStringToJsonSchema(hintMatch[1].trim());
+  return { type: "object", description: type.name };
 }
 
 function parseInterfaceFields(code: string): { name: string; type: string; required: boolean }[] {
   const fields: { name: string; type: string; required: boolean }[] = [];
   for (const line of code.split("\n")) {
+    if (line.trim().startsWith("//")) continue;
     const m = line.match(/^\s+(\w+)(\?)?\s*:\s*(.+?);?\s*$/);
-    if (m && !m[1].startsWith("//")) {
-      fields.push({ name: m[1], type: m[3].trim(), required: !m[2] });
-    }
+    if (m) fields.push({ name: m[1], type: m[3].trim(), required: !m[2] });
   }
   return fields;
 }
@@ -133,6 +124,48 @@ function tsTypeToJsonSchema(tsType: string): Record<string, unknown> {
   if (t === "unknown" || t === "any") return {};
   if (t.endsWith("[]")) return { type: "array", items: tsTypeToJsonSchema(tsType.slice(0, -2)) };
   return { type: "string", description: tsType };
+}
+
+function parseTsObjectLiteral(schema: string): { name: string; type: string; required: boolean }[] {
+  const fields: { name: string; type: string; required: boolean }[] = [];
+  const inner = schema.trim().replace(/^\{|\}$/g, "").trim();
+  if (!inner) return fields;
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of inner) {
+    if (ch === "{" || ch === "[" || ch === "(") depth++;
+    else if (ch === "}" || ch === "]" || ch === ")") depth--;
+    else if (ch === "," && depth === 0) { parts.push(current); current = ""; continue; }
+    current += ch;
+  }
+  if (current.trim()) parts.push(current);
+  for (const part of parts) {
+    const m = part.trim().match(/^(\w+)(\?)?\s*:\s*(.+)$/);
+    if (m) fields.push({ name: m[1], type: m[3].trim(), required: !m[2] });
+  }
+  return fields;
+}
+
+function schemaStringToJsonSchema(schema: string): Record<string, unknown> {
+  if (!schema || !schema.trim()) return { type: "object" };
+  try {
+    const parsed = JSON.parse(schema);
+    if (typeof parsed === "object" && parsed !== null) return parsed as Record<string, unknown>;
+  } catch { /* fall through */ }
+  const fields = parseTsObjectLiteral(schema);
+  if (fields.length > 0) {
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+    for (const f of fields) {
+      properties[f.name] = tsTypeToJsonSchema(f.type);
+      if (f.required) required.push(f.name);
+    }
+    const result: Record<string, unknown> = { type: "object", properties };
+    if (required.length > 0) result.required = required;
+    return result;
+  }
+  return { type: "object", description: schema.slice(0, 120) };
 }
 
 export function generateSwagger(contract: Contract): Record<string, unknown> {

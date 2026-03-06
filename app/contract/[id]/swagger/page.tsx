@@ -30,7 +30,7 @@ export default function SwaggerPage() {
 
   if (!contract || contract.id !== id) return null;
 
-  const spec = generateOpenApi(contract);
+  const spec = generateOpenApi(contract, typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const slug = contract.name.replaceAll(" ", "-").toLowerCase();
 
   function handleDownload() {

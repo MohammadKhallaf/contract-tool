@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 const HTML_TEMPLATE = `<!DOCTYPE html><html><head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <base href="__ORIGIN__/">
   <title>Swagger UI</title>
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist/swagger-ui.css">
   <style>body{margin:0}</style>
@@ -17,6 +18,8 @@ const HTML_TEMPLATE = `<!DOCTYPE html><html><head>
       presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
       layout: 'BaseLayout',
       deepLinking: true,
+      validatorUrl: null,
+      tryItOutEnabled: false,
     })
   </script>
 </body></html>`;
@@ -29,7 +32,14 @@ export function SwaggerFrame({ spec }: SwaggerFrameProps) {
   // Track the previous blob URL so we can revoke it when spec changes
   const prevUrl = useRef<string | null>(null);
 
-  const html = HTML_TEMPLATE.replace("__SPEC__", JSON.stringify(spec));
+  const specWithServers = {
+    ...spec,
+    servers: [{ url: typeof window !== "undefined" ? window.location.origin : "http://localhost:3000", description: "Current server" }],
+  };
+  const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+  const html = HTML_TEMPLATE
+    .replace("__ORIGIN__", origin)
+    .replace("__SPEC__", JSON.stringify(specWithServers));
   const blob = new Blob([html], { type: "text/html" });
   const blobUrl = URL.createObjectURL(blob);
 
