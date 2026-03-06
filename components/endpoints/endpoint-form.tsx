@@ -19,13 +19,14 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2 } from "lucide-react";
-import type { Endpoint, HttpMethod, ParamDefinition } from "@/types";
+import type { Endpoint, HttpMethod, ParamDefinition, Screen } from "@/types";
 
 interface Props {
   open: boolean;
   onClose: () => void;
   onSave: (ep: Omit<Endpoint, "id" | "enabled" | "isAiGenerated">) => void;
   initial?: Partial<Endpoint>;
+  screens?: Screen[];
 }
 
 const METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
@@ -97,7 +98,7 @@ function ParamList({
   );
 }
 
-export function EndpointForm({ open, onClose, onSave, initial }: Props) {
+export function EndpointForm({ open, onClose, onSave, initial, screens = [] }: Props) {
   const [method, setMethod] = useState<HttpMethod>(initial?.method ?? "GET");
   const [path, setPath] = useState(initial?.path ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
@@ -115,6 +116,9 @@ export function EndpointForm({ open, onClose, onSave, initial }: Props) {
   const [isPaginated, setIsPaginated] = useState(
     initial?.responseBody?.isPaginated ?? false
   );
+  const [linkedScreenIds, setLinkedScreenIds] = useState<string[]>(
+    initial?.linkedScreenIds ?? []
+  );
 
   function handleSave() {
     onSave({
@@ -124,7 +128,7 @@ export function EndpointForm({ open, onClose, onSave, initial }: Props) {
       pathParams,
       queryParams,
       headers: initial?.headers ?? [],
-      linkedScreenIds: initial?.linkedScreenIds ?? [],
+      linkedScreenIds,
       notes: notes || undefined,
       requestBody: reqSchema
         ? { contentType: reqContentType, schema: reqSchema }
@@ -229,6 +233,32 @@ export function EndpointForm({ open, onClose, onSave, initial }: Props) {
               className="min-h-20 font-mono text-sm"
             />
           </div>
+
+          {screens.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Used on Pages
+              </Label>
+              <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
+                {screens.map((screen) => (
+                  <label key={screen.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={linkedScreenIds.includes(screen.id)}
+                      onChange={(e) =>
+                        setLinkedScreenIds(
+                          e.target.checked
+                            ? [...linkedScreenIds, screen.id]
+                            : linkedScreenIds.filter((id) => id !== screen.id)
+                        )
+                      }
+                    />
+                    {screen.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Notes</Label>

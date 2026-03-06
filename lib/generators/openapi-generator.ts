@@ -1,6 +1,7 @@
-import type { Contract, Endpoint } from "@/types";
+import type { Contract, Endpoint, Annotation, Screen } from "@/types";
+import { getLinkedScreenNames } from "@/lib/utils/screen-links";
 
-function methodToOpenApi(ep: Endpoint): Record<string, unknown> {
+function methodToOpenApi(ep: Endpoint, annotations: Annotation[], screens: Screen[]): Record<string, unknown> {
   const operation: Record<string, unknown> = {
     summary: ep.description,
     operationId: `${ep.method.toLowerCase()}_${ep.path.replace(/[^a-zA-Z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "")}`,
@@ -76,6 +77,11 @@ function methodToOpenApi(ep: Endpoint): Record<string, unknown> {
 
   if (ep.notes) operation.description = ep.notes;
 
+  const pageNames = getLinkedScreenNames(ep, annotations, screens);
+  if (pageNames.length > 0) {
+    operation["x-used-on"] = pageNames;
+  }
+
   return operation;
 }
 
@@ -94,7 +100,7 @@ export function generateOpenApi(contract: Contract): Record<string, unknown> {
 
   for (const ep of enabledEndpoints) {
     if (!paths[ep.path]) paths[ep.path] = {};
-    paths[ep.path][ep.method.toLowerCase()] = methodToOpenApi(ep);
+    paths[ep.path][ep.method.toLowerCase()] = methodToOpenApi(ep, contract.annotations, contract.screens);
   }
 
   const spec: Record<string, unknown> = {
@@ -102,8 +108,8 @@ export function generateOpenApi(contract: Contract): Record<string, unknown> {
     info: {
       title: contract.name,
       version: "1.0.0",
-      description: contract.jiraStory
-        ? `${contract.jiraStory.key ? contract.jiraStory.key + ": " : ""}${contract.jiraStory.title}`
+      description: contract.jiraStories.length > 0
+        ? contract.jiraStories.map((s) => `${s.key ? s.key + ": " : ""}${s.title}`).join(" | ")
         : contract.name,
     },
     paths,

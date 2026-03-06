@@ -111,8 +111,8 @@ export function generateSwagger(contract: Contract): Record<string, unknown> {
     info: {
       title: contract.name,
       version: "1.0.0",
-      description: contract.jiraStory
-        ? `${contract.jiraStory.key ? contract.jiraStory.key + ": " : ""}${contract.jiraStory.title}`
+      description: contract.jiraStories.length > 0
+        ? contract.jiraStories.map((s) => `${s.key ? s.key + ": " : ""}${s.title}`).join(" | ")
         : contract.name,
     },
     basePath: "/",

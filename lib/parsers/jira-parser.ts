@@ -79,6 +79,29 @@ export function parseJiraText(raw: string): JiraStory {
   };
 }
 
+export function parseMultipleJiraTexts(text: string): JiraStory[] {
+  // Split on explicit --- divider
+  const chunks = text.split(/\n---\n/);
+  if (chunks.length > 1) {
+    return chunks.map((c) => c.trim()).filter(Boolean).map(parseJiraText);
+  }
+
+  // Try to detect multiple stories by finding JIRA key patterns starting new blocks
+  const matches = [...text.matchAll(/^([A-Z]+-\d+)/gm)];
+  if (matches.length > 1) {
+    const parts: string[] = [];
+    for (let i = 0; i < matches.length; i++) {
+      const start = matches[i].index!;
+      const end = i + 1 < matches.length ? matches[i + 1].index! : text.length;
+      parts.push(text.slice(start, end).trim());
+    }
+    return parts.filter(Boolean).map(parseJiraText);
+  }
+
+  // Single story
+  return [parseJiraText(text)];
+}
+
 export function serializeJiraStory(story: JiraStory): string {
   const lines: string[] = [];
   if (story.key) lines.push(`${story.key} - ${story.title}`);

@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
   Contract,
+  ContractStack,
   Endpoint,
   Screen,
   Annotation,
@@ -16,14 +17,28 @@ function makeId() {
   return crypto.randomUUID();
 }
 
+function migrateContract(raw: unknown): Contract {
+  const c = raw as Record<string, unknown>;
+  if (!Array.isArray(c.jiraStories)) {
+    c.jiraStories = c.jiraStory ? [c.jiraStory] : [];
+    delete c.jiraStory;
+  }
+  return c as Contract;
+}
+
 interface ContractState {
   contract: Contract | null;
   // lifecycle
   createContract: (name: string) => Contract;
   loadContract: (contract: Contract) => void;
   updateName: (name: string) => void;
-  // jira
-  setJiraStory: (story: JiraStory) => void;
+  // jira stories
+  addJiraStory: (story: JiraStory) => void;
+  updateJiraStory: (index: number, story: JiraStory) => void;
+  removeJiraStory: (index: number) => void;
+  setJiraStories: (stories: JiraStory[]) => void;
+  // stack
+  updateStack: (stack: ContractStack) => void;
   // screens
   addScreen: (screen: Omit<Screen, "id" | "annotationIds">) => string;
   removeScreen: (id: string) => void;
@@ -64,6 +79,7 @@ export const useContractStore = create<ContractState>()(
           name,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
+          jiraStories: [],
           screens: [],
           annotations: [],
           endpoints: [],
@@ -74,7 +90,7 @@ export const useContractStore = create<ContractState>()(
         return contract;
       },
 
-      loadContract: (contract) => set({ contract }),
+      loadContract: (contract) => set({ contract: migrateContract(contract) }),
 
       updateName: (name) =>
         set((s) =>
@@ -83,10 +99,64 @@ export const useContractStore = create<ContractState>()(
             : s
         ),
 
-      setJiraStory: (story) =>
+      addJiraStory: (story) =>
         set((s) =>
           s.contract
-            ? { contract: { ...s.contract, jiraStory: story, updatedAt: new Date().toISOString() } }
+            ? {
+                contract: {
+                  ...s.contract,
+                  jiraStories: [...s.contract.jiraStories, story],
+                  updatedAt: new Date().toISOString(),
+                },
+              }
+            : s
+        ),
+
+      updateJiraStory: (index, story) =>
+        set((s) =>
+          s.contract
+            ? {
+                contract: {
+                  ...s.contract,
+                  jiraStories: s.contract.jiraStories.map((st, i) =>
+                    i === index ? story : st
+                  ),
+                  updatedAt: new Date().toISOString(),
+                },
+              }
+            : s
+        ),
+
+      removeJiraStory: (index) =>
+        set((s) =>
+          s.contract
+            ? {
+                contract: {
+                  ...s.contract,
+                  jiraStories: s.contract.jiraStories.filter((_, i) => i !== index),
+                  updatedAt: new Date().toISOString(),
+                },
+              }
+            : s
+        ),
+
+      setJiraStories: (stories) =>
+        set((s) =>
+          s.contract
+            ? {
+                contract: {
+                  ...s.contract,
+                  jiraStories: stories,
+                  updatedAt: new Date().toISOString(),
+                },
+              }
+            : s
+        ),
+
+      updateStack: (stack) =>
+        set((s) =>
+          s.contract
+            ? { contract: { ...s.contract, stack, updatedAt: new Date().toISOString() } }
             : s
         ),
 
@@ -382,6 +452,16 @@ export const useContractStore = create<ContractState>()(
             : s
         ),
     }),
-    { name: "contract-tool-active-contract" }
+    {
+      name: "contract-tool-active-contract",
+      version: 2,
+      migrate: (state) => {
+        const s = state as { contract: unknown };
+        return {
+          ...s,
+          contract: s.contract ? migrateContract(s.contract) : null,
+        };
+      },
+    }
   )
 );

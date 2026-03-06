@@ -20,9 +20,9 @@ import { toast } from "sonner";
 import type { Contract } from "@/types";
 
 function buildPayload(contract: Contract, specs: ReturnType<typeof useSpecsStore.getState>["specs"]) {
-  const jiraStory = contract.jiraStory
-    ? serializeJiraStory(contract.jiraStory)
-    : "No JIRA story provided";
+  const jiraStory = contract.jiraStories.length > 0
+    ? contract.jiraStories.map((s) => serializeJiraStory(s)).join("\n\n---\n\n")
+    : "No JIRA stories provided";
 
   const screenDataUrls = contract.screens.slice(0, 3).map((s) => s.dataUrl);
 

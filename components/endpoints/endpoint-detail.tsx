@@ -2,12 +2,18 @@
 import type { Endpoint } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { ConfidenceBadge } from "./confidence-badge";
+import { useContractStore } from "@/stores/contract-store";
+import { getLinkedScreenNames } from "@/lib/utils/screen-links";
 
 interface Props {
   endpoint: Endpoint;
 }
 
 export function EndpointDetail({ endpoint }: Props) {
+  const screens = useContractStore((s) => s.contract?.screens ?? []);
+  const annotations = useContractStore((s) => s.contract?.annotations ?? []);
+  const linkedScreenNames = getLinkedScreenNames(endpoint, annotations, screens);
+
   return (
     <div className="p-4 space-y-3 text-sm bg-muted/30 rounded-b-lg border-t">
       {endpoint.confidence && (
@@ -95,6 +101,21 @@ export function EndpointDetail({ endpoint }: Props) {
               {endpoint.responseBody.schema}
             </pre>
           )}
+        </div>
+      )}
+
+      {linkedScreenNames.length > 0 && (
+        <div>
+          <p className="font-medium mb-1 text-xs text-muted-foreground uppercase tracking-wide">
+            Used on Pages
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {linkedScreenNames.map((name) => (
+              <Badge key={name} variant="secondary" className="text-[10px]">
+                {name}
+              </Badge>
+            ))}
+          </div>
         </div>
       )}
 

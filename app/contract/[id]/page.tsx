@@ -16,6 +16,7 @@ import { EndpointTable } from "@/components/endpoints/endpoint-table";
 import { TypeList } from "@/components/types-editor/type-list";
 import { SchemaList } from "@/components/schemas/schema-list";
 import { ExportPanel } from "@/components/export/export-panel";
+import { BeHandoffPanel } from "@/components/export/be-handoff-panel";
 import { AIAnalyzer } from "@/components/ai/ai-analyzer";
 import { ErdView } from "@/components/erd/erd-view";
 import { Save, ArrowLeft } from "lucide-react";
@@ -115,7 +116,7 @@ export default function ContractPage() {
           value={activePanel}
           onValueChange={(v) => setActivePanel(v as typeof activePanel)}
         >
-          <TabsList className="grid grid-cols-7 w-full mb-4">
+          <TabsList className="grid grid-cols-8 w-full mb-4">
             <TabsTrigger value="jira">JIRA</TabsTrigger>
             <TabsTrigger value="screens">
               Screens
@@ -137,6 +138,7 @@ export default function ContractPage() {
             <TabsTrigger value="schemas">Schemas</TabsTrigger>
             <TabsTrigger value="erd">ERD</TabsTrigger>
             <TabsTrigger value="export">Export</TabsTrigger>
+            <TabsTrigger value="be-handoff">BE Handoff</TabsTrigger>
           </TabsList>
 
           <TabsContent value="jira">
@@ -173,6 +175,10 @@ export default function ContractPage() {
 
           <TabsContent value="export">
             <ExportPanel />
+          </TabsContent>
+
+          <TabsContent value="be-handoff">
+            <BeHandoffPanel />
           </TabsContent>
         </Tabs>
       </main>

@@ -17,6 +17,7 @@ export function EndpointTable() {
   const highlightedAnnotationId = useUIStore((s) => s.highlightedAnnotationId);
   const selectedEndpointId = useUIStore((s) => s.selectedEndpointId);
   const annotations = useContractStore((s) => s.contract?.annotations ?? []);
+  const screens = useContractStore((s) => s.contract?.screens ?? []);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingEndpoint, setEditingEndpoint] = useState<Endpoint | null>(null);
@@ -75,6 +76,7 @@ export function EndpointTable() {
         open={formOpen}
         onClose={() => { setFormOpen(false); setEditingEndpoint(null); }}
         initial={editingEndpoint ?? undefined}
+        screens={screens}
         onSave={(data) => {
           if (editingEndpoint) {
             updateEndpoint(editingEndpoint.id, data);

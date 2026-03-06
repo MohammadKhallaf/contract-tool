@@ -1,4 +1,5 @@
 import type { Contract } from "@/types";
+import { getLinkedScreenNames, buildScreenEndpointMap } from "@/lib/utils/screen-links";
 
 export function generateMarkdown(contract: Contract): string {
   const sections: string[] = [];
@@ -7,27 +8,31 @@ export function generateMarkdown(contract: Contract): string {
   sections.push(`> Generated: ${new Date(contract.updatedAt).toLocaleString()}`);
   sections.push("");
 
-  // JIRA Story
-  if (contract.jiraStory) {
-    const story = contract.jiraStory;
-    sections.push("## JIRA Story");
-    if (story.key) sections.push(`**Key:** ${story.key}`);
-    sections.push(`**Title:** ${story.title}`);
-    if (story.storyPoints !== undefined)
-      sections.push(`**Story Points:** ${story.storyPoints}`);
-    if (story.priority) sections.push(`**Priority:** ${story.priority}`);
-    if (story.labels.length > 0)
-      sections.push(`**Labels:** ${story.labels.join(", ")}`);
-    if (story.description) {
-      sections.push("", "**Description:**", story.description);
-    }
-    if (story.acceptanceCriteria.length > 0) {
-      sections.push("", "**Acceptance Criteria:**");
-      story.acceptanceCriteria.forEach((ac, i) => {
-        sections.push(`${i + 1}. ${ac.text}`);
-      });
-    }
+  // JIRA Stories
+  if (contract.jiraStories.length > 0) {
+    sections.push("## JIRA Stories");
     sections.push("");
+    contract.jiraStories.forEach((story, idx) => {
+      const heading = story.key
+        ? `### Story ${idx + 1}: ${story.key} — ${story.title}`
+        : `### Story ${idx + 1}: ${story.title}`;
+      sections.push(heading);
+      if (story.storyPoints !== undefined)
+        sections.push(`**Story Points:** ${story.storyPoints}`);
+      if (story.priority) sections.push(`**Priority:** ${story.priority}`);
+      if (story.labels.length > 0)
+        sections.push(`**Labels:** ${story.labels.join(", ")}`);
+      if (story.description) {
+        sections.push("", "**Description:**", story.description);
+      }
+      if (story.acceptanceCriteria.length > 0) {
+        sections.push("", "**Acceptance Criteria:**");
+        story.acceptanceCriteria.forEach((ac, i) => {
+          sections.push(`${i + 1}. ${ac.text}`);
+        });
+      }
+      sections.push("");
+    });
   }
 
   // Endpoints table
@@ -95,6 +100,12 @@ export function generateMarkdown(contract: Contract): string {
         sections.push("");
       }
 
+      const pageNames = getLinkedScreenNames(ep, contract.annotations, contract.screens);
+      if (pageNames.length > 0) {
+        sections.push(`**Used on pages:** ${pageNames.join(", ")}`);
+        sections.push("");
+      }
+
       if (ep.notes) {
         sections.push("**Notes:**");
         sections.push(ep.notes);
@@ -152,6 +163,25 @@ export function generateMarkdown(contract: Contract): string {
         sections.push(`| #${ann.number} | ${endpointStr} |`);
       }
       sections.push("");
+    }
+  }
+
+  // Page → Endpoint Map
+  if (contract.screens.length > 0 && enabledEndpoints.length > 0) {
+    const screenEpMap = buildScreenEndpointMap(enabledEndpoints, contract.annotations);
+    const hasLinks = [...screenEpMap.values()].some((eps) => eps.length > 0);
+    if (hasLinks) {
+      sections.push("## Page → Endpoint Map");
+      sections.push("");
+      for (const screen of contract.screens) {
+        const eps = screenEpMap.get(screen.id);
+        if (!eps || eps.length === 0) continue;
+        sections.push(`### ${screen.name}`);
+        for (const ep of eps) {
+          sections.push(`- \`${ep.method} ${ep.path}\` — ${ep.description}`);
+        }
+        sections.push("");
+      }
     }
   }
 

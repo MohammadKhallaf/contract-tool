@@ -7,7 +7,8 @@ export type WorkspacePanel =
   | "types"
   | "schemas"
   | "erd"
-  | "export";
+  | "export"
+  | "be-handoff";
 
 export type AnnotationMode = "point" | "rect";
 

@@ -9,6 +9,7 @@ import { generateMarkdown } from "@/lib/generators/markdown-generator";
 import { generateOpenApi, generateOpenApiYaml } from "@/lib/generators/openapi-generator";
 import { generateSwagger } from "@/lib/generators/swagger-generator";
 import { generateYaml } from "@/lib/generators/yaml-generator";
+import { generateBeHandoff } from "@/lib/generators/be-handoff-generator";
 import { useContractStore } from "@/stores/contract-store";
 import { CopyButton } from "./copy-button";
 
@@ -81,6 +82,10 @@ export function ExportPanel() {
     );
   }
 
+  function downloadBeHandoff() {
+    downloadFile(generateBeHandoff(c), `${slug}-be-handoff.md`, "text/markdown");
+  }
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -123,6 +128,9 @@ export function ExportPanel() {
             className="gap-1.5"
           >
             <ExternalLink className="h-3.5 w-3.5" /> View Swagger UI
+          </Button>
+          <Button variant="outline" size="sm" onClick={downloadBeHandoff} className="gap-1.5">
+            <Download className="h-3.5 w-3.5" /> BE Reference MD
           </Button>
         </div>
       </div>

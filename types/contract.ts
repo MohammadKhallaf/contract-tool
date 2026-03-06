@@ -79,12 +79,21 @@ export interface GeneratedSchema {
   isEdited: boolean;
 }
 
+export interface ContractStack {
+  backend: string;
+  framework: string;
+  database: string;
+  frontend: string;
+  auth: string;
+}
+
 export interface Contract {
   id: string;
   name: string;
   createdAt: string;
   updatedAt: string;
-  jiraStory?: import("./jira").JiraStory;
+  jiraStories: import("./jira").JiraStory[];
+  stack?: ContractStack;
   screens: Screen[];
   annotations: Annotation[];
   endpoints: Endpoint[];

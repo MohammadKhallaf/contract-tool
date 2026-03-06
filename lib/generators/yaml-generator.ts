@@ -54,24 +54,25 @@ export function generateYaml(contract: Contract): string {
   lines.push(`name: "${contract.name}"`);
   lines.push(`generated: "${new Date(contract.updatedAt).toISOString()}"`);
 
-  if (contract.jiraStory) {
-    const s = contract.jiraStory;
-    lines.push("jira_story:");
-    if (s.key) lines.push(`  key: "${s.key}"`);
-    lines.push(`  title: "${s.title.replace(/"/g, '\\"')}"`);
-    if (s.storyPoints !== undefined) lines.push(`  story_points: ${s.storyPoints}`);
-    if (s.priority) lines.push(`  priority: "${s.priority}"`);
-    if (s.labels.length > 0) lines.push(`  labels: [${s.labels.map((l) => `"${l}"`).join(", ")}]`);
-    if (s.description) {
-      lines.push(`  description: |`);
-      s.description.split("\n").forEach((l) => lines.push(`    ${l}`));
-    }
-    if (s.acceptanceCriteria.length > 0) {
-      lines.push("  acceptance_criteria:");
-      s.acceptanceCriteria.forEach((ac) => {
-        lines.push(`    - text: "${ac.text.replace(/"/g, '\\"')}"`);
-      });
-    }
+  if (contract.jiraStories.length > 0) {
+    lines.push("jira_stories:");
+    contract.jiraStories.forEach((s) => {
+      lines.push(`  - title: "${s.title.replace(/"/g, '\\"')}"`);
+      if (s.key) lines.push(`    key: "${s.key}"`);
+      if (s.storyPoints !== undefined) lines.push(`    story_points: ${s.storyPoints}`);
+      if (s.priority) lines.push(`    priority: "${s.priority}"`);
+      if (s.labels.length > 0) lines.push(`    labels: [${s.labels.map((l) => `"${l}"`).join(", ")}]`);
+      if (s.description) {
+        lines.push(`    description: |`);
+        s.description.split("\n").forEach((l) => lines.push(`      ${l}`));
+      }
+      if (s.acceptanceCriteria.length > 0) {
+        lines.push("    acceptance_criteria:");
+        s.acceptanceCriteria.forEach((ac) => {
+          lines.push(`      - text: "${ac.text.replace(/"/g, '\\"')}"`);
+        });
+      }
+    });
   }
 
   if (enabledEndpoints.length > 0) {
