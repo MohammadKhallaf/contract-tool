@@ -15,8 +15,8 @@ const SPEC_URLS = [
 interface SettingsState {
   aiProvider: AIProviderType;
   apiKey: string;
-  model: string;       // vision model — used when screens are attached
-  textModel: string;   // text-only model — used when no screens (cheaper)
+  model: string;       // primary model for all AI tasks (single-call flow by default)
+  textModel: string;   // optional override — when set, enables 2-step cost-saving mode (vision describes, this model generates)
   specUrls: string[];
   setAiProvider: (provider: AIProviderType) => void;
   setApiKey: (key: string) => void;

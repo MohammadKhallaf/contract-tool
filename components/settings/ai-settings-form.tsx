@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { useSettingsStore } from "@/stores/settings-store";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -11,22 +12,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
 import type { AIProviderType } from "@/types";
 
-const PROVIDER_MODELS: Record<string, { vision: string[]; text: string[] }> = {
-  claude: {
-    vision: ["claude-sonnet-4-6", "claude-opus-4-6"],
-    text: ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"],
-  },
-  openai: {
-    vision: ["gpt-4o", "gpt-4-turbo"],
-    text: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
-  },
-  poe: {
-    vision: ["Claude-Sonnet-4.5", "Claude-Opus-4.5", "GPT-4o", "Gemini-2.0-Flash"],
-    text: ["Claude-Haiku-4.5", "Claude-Sonnet-4.5", "Gemini-2.0-Flash", "Llama-3.1-405B"],
-  },
-  manual: { vision: [], text: [] },
+// Vision-capable models shown in the primary picker
+const VISION_MODELS: Record<string, string[]> = {
+  claude: ["claude-sonnet-4-6", "claude-opus-4-6"],
+  openai: ["gpt-4o", "gpt-4-turbo"],
+  poe: ["Claude-Sonnet-4.5", "Claude-Opus-4.5", "GPT-4o", "Gemini-2.0-Flash"],
+  manual: [],
+};
+
+// All models (including cheaper ones) shown in the advanced override picker
+const ALL_MODELS: Record<string, string[]> = {
+  claude: ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"],
+  openai: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
+  poe: ["Claude-Haiku-4.5", "Claude-Sonnet-4.5", "Gemini-2.0-Flash", "Llama-3.1-405B"],
+  manual: [],
 };
 
 const API_KEY_PLACEHOLDERS: Record<string, string> = {
@@ -39,6 +41,7 @@ const API_KEY_PLACEHOLDERS: Record<string, string> = {
 export function AISettingsForm() {
   const { aiProvider, apiKey, model, textModel, setAiProvider, setApiKey, setModel, setTextModel } =
     useSettingsStore();
+  const [advancedOpen, setAdvancedOpen] = useState(!!textModel);
 
   async function testConnection() {
     if (!apiKey) {
@@ -56,7 +59,7 @@ export function AISettingsForm() {
             "anthropic-dangerous-direct-browser-access": "true",
           },
           body: JSON.stringify({
-            model: model || textModel || "claude-haiku-4-5-20251001",
+            model: model || "claude-sonnet-4-6",
             max_tokens: 10,
             messages: [{ role: "user", content: "ping" }],
           }),
@@ -90,8 +93,8 @@ export function AISettingsForm() {
     }
   }
 
-  const visionModels = PROVIDER_MODELS[aiProvider]?.vision ?? [];
-  const textModels = PROVIDER_MODELS[aiProvider]?.text ?? [];
+  const visionModels = VISION_MODELS[aiProvider] ?? [];
+  const allModels = ALL_MODELS[aiProvider] ?? [];
 
   return (
     <div className="space-y-4">
@@ -102,6 +105,7 @@ export function AISettingsForm() {
           onValueChange={(v) => {
             setAiProvider(v as AIProviderType);
             setModel("");
+            setTextModel("");
           }}
         >
           <SelectTrigger>
@@ -133,13 +137,12 @@ export function AISettingsForm() {
             </p>
           </div>
 
-          <div className="rounded-md border p-3 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Vision Model <span className="normal-case font-normal">(used when screens are attached)</span>
-            </p>
+          {/* Primary model picker */}
+          <div className="space-y-1.5">
+            <Label>AI Model</Label>
             <Select value={model} onValueChange={setModel}>
               <SelectTrigger>
-                <SelectValue placeholder="Select vision model..." />
+                <SelectValue placeholder="Select model..." />
               </SelectTrigger>
               <SelectContent>
                 {visionModels.map((m) => (
@@ -154,32 +157,66 @@ export function AISettingsForm() {
                 onChange={(e) => setModel(e.target.value)}
               />
             )}
+            <p className="text-xs text-muted-foreground">
+              Used for screen analysis and endpoint generation.
+            </p>
           </div>
 
-          <div className="rounded-md border p-3 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Text Model <span className="normal-case font-normal">(used when no screens — cheaper)</span>
-            </p>
-            <Select value={textModel} onValueChange={setTextModel}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select text model (falls back to vision model)..." />
-              </SelectTrigger>
-              <SelectContent>
-                {textModels.map((m) => (
-                  <SelectItem key={m} value={m}>{m}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {aiProvider === "poe" && (
-              <Input
-                placeholder="Or type any Poe bot name, e.g. Claude-Haiku-4.5"
-                value={textModel}
-                onChange={(e) => setTextModel(e.target.value)}
-              />
+          {/* Collapsible advanced section */}
+          <div className="rounded-md border">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setAdvancedOpen((o) => !o)}
+            >
+              <span>Advanced</span>
+              {advancedOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </button>
+
+            {advancedOpen && (
+              <div className="px-3 pb-3 space-y-3 border-t pt-3">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label>Generation Model Override</Label>
+                    {textModel && (
+                      <button
+                        type="button"
+                        onClick={() => setTextModel("")}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                  <Select value={textModel} onValueChange={setTextModel}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="None (use primary model)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allModels.map((m) => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {aiProvider === "poe" && (
+                    <Input
+                      placeholder="Or type any Poe bot name, e.g. Claude-Haiku-4.5"
+                      value={textModel}
+                      onChange={(e) => setTextModel(e.target.value)}
+                    />
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Override generation model (optional) — enables 2-step mode where a cheaper model generates
+                    endpoints from a text description of screens instead of seeing images directly.{" "}
+                    <span className="text-amber-600 dark:text-amber-400">
+                      Enabling an override uses a 2-step process to save costs, but may reduce accuracy as the
+                      generator only sees a text description of your screens.
+                    </span>
+                  </p>
+                </div>
+              </div>
             )}
-            <p className="text-xs text-muted-foreground">
-              Recommended: Haiku (10× cheaper than Sonnet, no vision needed for text-only analysis).
-            </p>
           </div>
 
           <Button variant="outline" onClick={testConnection}>

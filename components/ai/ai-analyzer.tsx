@@ -61,12 +61,13 @@ function buildPayload(contract: Contract, specs: ReturnType<typeof useSpecsStore
   return { jiraStory, screenDataUrls, existingPatterns, screenContext, prompt };
 }
 
-type Step = "idle" | "describing" | "generating" | "done";
+type Step = "idle" | "describing" | "generating" | "loading" | "done";
 
 const STEP_LABEL: Record<Step, string> = {
   idle: "Analyze with AI",
   describing: "Reading screens…",
   generating: "Generating endpoints…",
+  loading: "Analyzing…",
   done: "Done",
 };
 
@@ -85,7 +86,7 @@ export function AIAnalyzer() {
   const { aiProvider, apiKey, model, textModel } = useSettingsStore();
   const specs = useSpecsStore((s) => s.specs);
 
-  const loading = step === "describing" || step === "generating";
+  const loading = step === "describing" || step === "generating" || step === "loading";
   const payload = contract ? buildPayload(contract, specs) : null;
 
   async function analyze() {
@@ -99,48 +100,68 @@ export function AIAnalyzer() {
     }
 
     const { jiraStory, screenDataUrls, existingPatterns, screenContext } = buildPayload(contract, specs);
-    const visionModel = model || (aiProvider === "claude" ? "claude-sonnet-4-6" : aiProvider === "openai" ? "gpt-4o" : "Claude-Sonnet-4.5");
-    const genModel = textModel || (aiProvider === "claude" ? "claude-haiku-4-5-20251001" : aiProvider === "openai" ? "gpt-4o-mini" : "Claude-Haiku-4.5");
+    const primaryModel = model || (aiProvider === "claude" ? "claude-sonnet-4-6" : aiProvider === "openai" ? "gpt-4o" : "Claude-Sonnet-4.5");
 
     try {
-      let enrichedScreenContext = screenContext;
+      if (textModel) {
+        // 2-step flow: vision model describes screens, text model generates (cost-saving override)
+        let enrichedScreenContext = screenContext;
 
-      // Step 1: vision model describes screens (only if screens exist)
-      if (screenDataUrls.length > 0) {
-        setStep("describing");
-        const visionProvider = makeProvider(aiProvider, apiKey, visionModel);
-        if (visionProvider?.describeScreens) {
-          const description = await visionProvider.describeScreens(screenDataUrls);
-          // Merge AI screen description with manual annotation context
-          enrichedScreenContext = screenContext
-            ? `${screenContext}\n\nAI Visual Analysis:\n${description}`
-            : `AI Visual Analysis:\n${description}`;
+        if (screenDataUrls.length > 0) {
+          setStep("describing");
+          const visionProvider = makeProvider(aiProvider, apiKey, primaryModel);
+          if (visionProvider?.describeScreens) {
+            const description = await visionProvider.describeScreens(screenDataUrls);
+            enrichedScreenContext = screenContext
+              ? `${screenContext}\n\nAI Visual Analysis:\n${description}`
+              : `AI Visual Analysis:\n${description}`;
+          }
         }
-      }
 
-      // Step 2: text model generates endpoints from JIRA + screen description
-      setStep("generating");
-      const genProvider = makeProvider(aiProvider, apiKey, genModel);
-      if (!genProvider) return;
+        setStep("generating");
+        const genProvider = makeProvider(aiProvider, apiKey, textModel);
+        if (!genProvider) return;
 
-      const result = await genProvider.analyze({
-        jiraStory,
-        screenDataUrls: [], // no images — already described in text
-        existingPatterns,
-        screenContext: enrichedScreenContext || undefined,
-      });
+        const result = await genProvider.analyze({
+          jiraStory,
+          screenDataUrls: [], // already described in text
+          existingPatterns,
+          screenContext: enrichedScreenContext || undefined,
+        });
 
-      setStep("done");
+        setStep("done");
 
-      if (result.endpoints.length > 0) {
-        addEndpoints(result.endpoints);
-        toast.success(
-          screenDataUrls.length > 0
-            ? `${result.endpoints.length} endpoint(s) added (Sonnet read screens → Haiku generated)`
-            : `${result.endpoints.length} endpoint(s) added`
-        );
+        if (result.endpoints.length > 0) {
+          addEndpoints(result.endpoints);
+          toast.success(
+            screenDataUrls.length > 0
+              ? `${result.endpoints.length} endpoint(s) added (2-step: vision → text model)`
+              : `${result.endpoints.length} endpoint(s) added`
+          );
+        } else {
+          toast.warning("AI returned no endpoints. Check your API key and story.");
+        }
       } else {
-        toast.warning("AI returned no endpoints. Check your API key and story.");
+        // Single-call flow: one model sees everything (default, best quality)
+        setStep("loading");
+        const provider = makeProvider(aiProvider, apiKey, primaryModel);
+        if (!provider) return;
+
+        const result = await provider.analyze({
+          jiraStory,
+          screenDataUrls,
+          existingPatterns,
+          screenContext: screenContext || undefined,
+        });
+
+        setStep("done");
+
+        if (result.endpoints.length > 0) {
+          addEndpoints(result.endpoints);
+          toast.success(`${result.endpoints.length} endpoint(s) added`);
+        } else {
+          toast.warning("AI returned no endpoints. Check your API key and story.");
+        }
       }
     } catch (err) {
       toast.error(`AI analysis failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -171,7 +192,9 @@ export function AIAnalyzer() {
         title={
           aiProvider === "manual" || !apiKey
             ? "Configure AI provider in Settings"
-            : "Step 1: vision model reads screens → Step 2: text model generates endpoints"
+            : textModel
+            ? "2-step mode: vision model reads screens → text model generates endpoints"
+            : "Single-call mode: one model sees images and generates endpoints directly"
         }
       >
         {loading ? (
