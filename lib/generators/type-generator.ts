@@ -1,5 +1,27 @@
 import type { Endpoint, GeneratedType } from "@/types";
 
+function parseSchemaToFields(schema: string): string[] {
+  const trimmed = schema.trim();
+  // Match TypeScript object literal: { key: type, key?: type, ... }
+  const inner = trimmed.match(/^\{([\s\S]*)\}$/)?.[1];
+  if (!inner) return [`  body?: unknown; // ${trimmed.slice(0, 80)}`];
+
+  const fields: string[] = [];
+  // Split on commas or semicolons not inside nested braces/parens
+  const entries = inner.split(/[,;]\s*(?=[a-zA-Z_$"'])/).map((s) => s.trim()).filter(Boolean);
+  for (const entry of entries) {
+    const m = entry.match(/^["']?(\w+)["']?(\?)?\s*:\s*(.+)$/);
+    if (!m) continue;
+    const [, name, optional, rawType] = m;
+    const type = rawType.trim().replace(/,$/, "");
+    const isNullable = type.includes("null");
+    // Nullable fields: no `?`, use `type | null` directly
+    const opt = isNullable ? "" : (optional ?? "?");
+    fields.push(`  ${name}${opt}: ${type};`);
+  }
+  return fields.length > 0 ? fields : [`  body?: unknown; // ${trimmed.slice(0, 80)}`];
+}
+
 function toPascalCase(str: string): string {
   return str
     .replace(/[^a-zA-Z0-9]+(.)/g, (_, c) => c.toUpperCase())
@@ -45,18 +67,22 @@ export function generateTypes(
 
       // Path params
       ep.pathParams.forEach((p) => {
-        fields.push(`  ${p.name}${p.required ? "" : "?"}: ${p.type || "string"};`);
+        if (p.description) fields.push(`  /** ${p.description} */`);
+        const isNullable = (p.type ?? "").includes("null");
+        fields.push(`  ${p.name}${p.required && !isNullable ? "" : "?"}: ${p.type || "string"};`);
       });
 
       // Query params
       ep.queryParams.forEach((p) => {
-        fields.push(`  ${p.name}${p.required ? "" : "?"}: ${p.type || "string"};`);
+        if (p.description) fields.push(`  /** ${p.description} */`);
+        const isNullable = (p.type ?? "").includes("null");
+        fields.push(`  ${p.name}${p.required && !isNullable ? "" : "?"}: ${p.type || "string"};`);
       });
 
-      // Request body fields (if schema is a simple string, use it)
+      // Request body fields — parse schema into typed fields
       if (ep.requestBody?.schema) {
-        fields.push(`  // ${ep.requestBody.contentType}`);
-        fields.push(`  body?: unknown; // Define schema: ${ep.requestBody.schema.slice(0, 80)}`);
+        const parsed = parseSchemaToFields(ep.requestBody.schema);
+        fields.push(...parsed);
       }
 
       if (fields.length === 0) fields.push("  // No parameters");
@@ -82,9 +108,13 @@ export function generateTypes(
 
       let code: string;
       if (paginated) {
-        code = `export interface ${responseName}Item {\n  // TODO: define response shape\n  id: string;\n}\n\nexport type ${responseName} = PaginatedResponse<${responseName}Item>;`;
+        const itemFields = schema ? parseSchemaToFields(schema) : ["  id: string;"];
+        code = `export interface ${responseName}Item {\n${itemFields.join("\n")}\n}\n\nexport type ${responseName} = PaginatedResponse<${responseName}Item>;`;
+      } else if (schema) {
+        const respFields = parseSchemaToFields(schema);
+        code = `export interface ${responseName} {\n${respFields.join("\n")}\n}`;
       } else {
-        code = `export interface ${responseName} {\n  // TODO: define response shape${schema ? `\n  // Schema hint: ${schema.slice(0, 80)}` : ""}\n}`;
+        code = `export interface ${responseName} {\n  // TODO: define response shape\n}`;
       }
 
       result.push({
@@ -108,7 +138,7 @@ export function generateTypes(
       result.unshift({
         id: crypto.randomUUID(),
         name: helperName,
-        code: `export interface PaginatedResponse<T> {\n  data: T[];\n  total: number;\n  page: number;\n  pageSize: number;\n  hasNextPage: boolean;\n}`,
+        code: `export interface PaginatedResponse<T> {\n  data: T[];\n  total: number;\n  offset: number;\n  itemsPerPage: number;\n}`,
         linkedEndpointIds: [],
         isEdited: false,
       });

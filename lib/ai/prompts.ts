@@ -23,6 +23,18 @@ export function buildAnalysisPrompt(
 Use these existing API patterns for naming consistency:
 ${existingPatterns || "No existing patterns provided."}
 ${stackContext ? `\nTech Stack:\n${stackContext}\n` : ""}${patternsContext ? `\nReusable patterns to follow (selected by developer):\n${patternsContext}\n` : ""}
+OpenAPI & TypeScript Best Practices (always follow these):
+- Use PascalCase for all schema/type names (e.g. CreateUserRequest, UserResponse)
+- Use camelCase for all property names
+- Separate request and response schemas — never reuse the same schema for both
+- Mark a property as required only if it is always present in every response/request
+- If a field can be null, note it as nullable (e.g. "deletedAt": "string | null")
+- For string enum fields, list the allowed values inline (e.g. "status": "active | inactive | pending")
+- For paginated endpoints, always set isPaginated: true and shape the response as { data: T[], total: number, offset: number, itemsPerPage: number }
+- Use clear operationId-style descriptions: verb + noun in camelCase (e.g. "getUser", "createInvoice", "listOrders")
+- Prefer explicit field names over generic shapes; avoid additionalProperties
+- For error responses, use the shape: { message: string, code: string }
+
 JIRA Story:
 ${jiraStory}
 ${screenContext ? `\nScreen Annotations & Notes:\n${screenContext}\n` : ""}${typesContext ? `\n${typesContext}\n` : ""}${devFeedback ? `\nDeveloper Feedback on Previous Output (address these issues):\n${devFeedback}\n` : ""}

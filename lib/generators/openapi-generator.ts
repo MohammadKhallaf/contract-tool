@@ -59,11 +59,12 @@ function methodToOpenApi(ep: Endpoint, annotations: Annotation[], screens: Scree
     if (ep.responseBody.isPaginated) {
       responseSchema = {
         type: "object",
+        required: ["data", "total", "offset", "itemsPerPage"],
         properties: {
           data: { type: "array", items: responseSchema },
           total: { type: "integer" },
-          page: { type: "integer" },
-          pageSize: { type: "integer" },
+          offset: { type: "integer" },
+          itemsPerPage: { type: "integer" },
         },
       };
     }
@@ -147,14 +148,30 @@ function schemaStringToJsonSchema(schema: string): Record<string, unknown> {
 }
 
 function tsTypeToJsonSchema(tsType: string): Record<string, unknown> {
-  const t = tsType.toLowerCase().trim();
+  const trimmed = tsType.trim();
+
+  // Nullable: "string | null" → { type: "string", nullable: true }
+  if (trimmed.includes("| null") || trimmed.includes("null |")) {
+    const base = trimmed.replace(/\s*\|\s*null/g, "").replace(/null\s*\|\s*/g, "").trim();
+    return { ...tsTypeToJsonSchema(base), nullable: true };
+  }
+
+  // String enum union: "active" | "inactive" → { type: "string", enum: [...] }
+  if (/^["']/.test(trimmed) || trimmed.includes('" | "') || trimmed.includes("' | '")) {
+    const values = trimmed.match(/"([^"]+)"|'([^']+)'/g);
+    if (values && values.length > 0) {
+      return { type: "string", enum: values.map((v) => v.replace(/^["']|["']$/g, "")) };
+    }
+  }
+
+  const t = trimmed.toLowerCase();
   if (t === "string") return { type: "string" };
   if (t === "number" || t === "integer" || t === "int") return { type: "integer" };
   if (t === "float" || t === "double") return { type: "number" };
   if (t === "boolean" || t === "bool") return { type: "boolean" };
   if (t === "unknown" || t === "any") return {};
-  if (t.endsWith("[]")) return { type: "array", items: tsTypeToJsonSchema(tsType.slice(0, -2)) };
-  return { type: "string", description: tsType };
+  if (t.endsWith("[]")) return { type: "array", items: tsTypeToJsonSchema(trimmed.slice(0, -2)) };
+  return { type: "string", description: trimmed };
 }
 
 function typeToJsonSchema(type: GeneratedType): Record<string, unknown> {

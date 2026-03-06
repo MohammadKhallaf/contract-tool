@@ -1,7 +1,13 @@
 import type { GeneratedType, GeneratedSchema } from "@/types";
 
 function typeToYup(tsType: string): string {
-  const t = tsType.toLowerCase().trim();
+  const trimmed = tsType.trim();
+  // Detect string union enum: "active" | "inactive" | ...
+  if (/^["']/.test(trimmed) || trimmed.includes('" | "') || trimmed.includes("' | '")) {
+    const values = trimmed.match(/"([^"]+)"|'([^']+)'/g);
+    if (values && values.length > 0) return `yup.mixed().oneOf([${values.join(", ")}])`;
+  }
+  const t = trimmed.toLowerCase();
   if (t === "string") return "yup.string()";
   if (t === "number" || t === "integer") return "yup.number()";
   if (t === "boolean") return "yup.boolean()";
@@ -57,8 +63,11 @@ export function generateSchemas(
     const fieldLines = fields
       .filter((f) => !f.name.startsWith("//"))
       .map((f) => {
-        const yupType = typeToYup(f.type);
-        const chain = f.optional ? `${yupType}` : `${yupType}.required()`;
+        const isNullable = f.type.includes("null");
+        const baseType = isNullable ? f.type.replace(/\s*\|\s*null/g, "").trim() : f.type;
+        const yupType = typeToYup(baseType);
+        const base = isNullable ? `${yupType}.nullable()` : yupType;
+        const chain = f.optional ? base : `${base}.required()`;
         return `  ${f.name}: ${chain},`;
       });
 
