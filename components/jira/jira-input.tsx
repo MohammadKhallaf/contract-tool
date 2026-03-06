@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { StructuredForm } from "./structured-form";
 import { StoryPreview } from "./story-preview";
 import { DocxUpload } from "./docx-upload";
+import { EpicFileImport } from "./epic-file-import";
 import { parseMultipleJiraTexts } from "@/lib/parsers/jira-parser";
 import { useContractStore } from "@/stores/contract-store";
 import type { JiraStory } from "@/types";
@@ -20,7 +21,7 @@ export function JiraInput() {
   const setJiraStories = useContractStore((s) => s.setJiraStories);
 
   const [showAddPanel, setShowAddPanel] = useState(false);
-  const [addTab, setAddTab] = useState<"paste" | "structured" | "docx">("paste");
+  const [addTab, setAddTab] = useState<"paste" | "structured" | "docx" | "import-file">("paste");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [collapsedIndexes, setCollapsedIndexes] = useState<Set<number>>(new Set());
 
@@ -151,12 +152,13 @@ export function JiraInput() {
           <CardContent>
             <Tabs
               value={addTab}
-              onValueChange={(v) => setAddTab(v as "paste" | "structured" | "docx")}
+              onValueChange={(v) => setAddTab(v as "paste" | "structured" | "docx" | "import-file")}
             >
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="paste">Paste Text</TabsTrigger>
                 <TabsTrigger value="structured">Structured Form</TabsTrigger>
                 <TabsTrigger value="docx">Upload .docx</TabsTrigger>
+                <TabsTrigger value="import-file">Import File</TabsTrigger>
               </TabsList>
               <TabsContent value="paste" className="mt-4">
                 <MultiPasteInput onParsed={handleMultiPaste} />
@@ -168,6 +170,17 @@ export function JiraInput() {
                 <DocxUpload
                   onParsed={(story) => {
                     handleAddParsed(story);
+                  }}
+                />
+              </TabsContent>
+              <TabsContent value="import-file" className="mt-4">
+                <EpicFileImport
+                  onImported={(stories) => {
+                    setJiraStories([...jiraStories, ...stories]);
+                    setShowAddPanel(false);
+                    toast.success(
+                      `${stories.length} ${stories.length === 1 ? "story" : "stories"} imported`,
+                    );
                   }}
                 />
               </TabsContent>
