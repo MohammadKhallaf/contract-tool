@@ -2,37 +2,9 @@
 import { useCallback, useRef, useState } from "react";
 import { Upload, ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { compressFile } from "@/lib/image-utils";
 import { useContractStore } from "@/stores/contract-store";
 import { toast } from "sonner";
-
-async function compressImage(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const maxSize = 1920;
-      let { width, height } = img;
-      if (width > maxSize || height > maxSize) {
-        if (width > height) {
-          height = Math.round((height * maxSize) / width);
-          width = maxSize;
-        } else {
-          width = Math.round((width * maxSize) / height);
-          height = maxSize;
-        }
-      }
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0, width, height);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", 0.8));
-    };
-    img.onerror = reject;
-    img.src = url;
-  });
-}
 
 export function ScreenUpload() {
   const addScreen = useContractStore((s) => s.addScreen);
@@ -48,7 +20,7 @@ export function ScreenUpload() {
       }
       for (const file of images) {
         try {
-          const dataUrl = await compressImage(file);
+          const dataUrl = await compressFile(file);
           addScreen({ name: file.name.replace(/\.[^.]+$/, ""), dataUrl });
         } catch {
           toast.error(`Failed to process ${file.name}`);

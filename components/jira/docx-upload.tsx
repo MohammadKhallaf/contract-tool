@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { extractDocxText } from "@/lib/parsers/docx-parser";
 import { parseJiraText } from "@/lib/parsers/jira-parser";
+import { compressDataUrl } from "@/lib/image-utils";
 import { useContractStore } from "@/stores/contract-store";
 import type { JiraStory } from "@/types";
 
@@ -40,10 +41,13 @@ export function DocxUpload({ onParsed }: Props) {
         setError("No text content found in this document.");
         return;
       }
+      const compressedUrls = await Promise.all(
+        result.imageDataUrls.map((url) => compressDataUrl(url))
+      );
       setExtracted({
         filename: file.name,
         text: result.text,
-        imageDataUrls: result.imageDataUrls,
+        imageDataUrls: compressedUrls,
         imageNames: result.imageNames,
       });
     } catch (err) {

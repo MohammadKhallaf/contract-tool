@@ -17,11 +17,13 @@ interface SettingsState {
   apiKey: string;
   model: string;       // primary model for all AI tasks (single-call flow by default)
   textModel: string;   // optional override — when set, enables 2-step cost-saving mode (vision describes, this model generates)
+  includeTypesInPrompt: boolean;
   specUrls: string[];
   setAiProvider: (provider: AIProviderType) => void;
   setApiKey: (key: string) => void;
   setModel: (model: string) => void;
   setTextModel: (model: string) => void;
+  setIncludeTypesInPrompt: (v: boolean) => void;
   addSpecUrl: (url: string) => void;
   removeSpecUrl: (url: string) => void;
   resetSpecUrls: () => void;
@@ -34,11 +36,13 @@ export const useSettingsStore = create<SettingsState>()(
       apiKey: "",
       model: "",
       textModel: "",
+      includeTypesInPrompt: false,
       specUrls: SPEC_URLS,
       setAiProvider: (provider) => set({ aiProvider: provider }),
       setApiKey: (key) => set({ apiKey: key }),
       setModel: (model) => set({ model }),
       setTextModel: (textModel) => set({ textModel }),
+      setIncludeTypesInPrompt: (includeTypesInPrompt) => set({ includeTypesInPrompt }),
       addSpecUrl: (url) =>
         set((state) => ({ specUrls: [...state.specUrls, url] })),
       removeSpecUrl: (url) =>

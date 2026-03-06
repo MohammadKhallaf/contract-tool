@@ -12,16 +12,18 @@ Be specific about field names and data structures. Output plain text, one sectio
 export function buildAnalysisPrompt(
   jiraStory: string,
   existingPatterns: string,
-  screenContext?: string
+  screenContext?: string,
+  stackContext?: string,
+  typesContext?: string
 ): string {
   return `You are an API contract generator. Analyze the JIRA story below and suggest API endpoints needed.
 
 Use these existing API patterns for naming consistency:
 ${existingPatterns || "No existing patterns provided."}
-
+${stackContext ? `\nTech Stack:\n${stackContext}\n` : ""}
 JIRA Story:
 ${jiraStory}
-${screenContext ? `\nScreen Annotations & Notes:\n${screenContext}\n` : ""}
+${screenContext ? `\nScreen Annotations & Notes:\n${screenContext}\n` : ""}${typesContext ? `\n${typesContext}\n` : ""}
 Respond ONLY with valid JSON in this exact shape:
 {
   "endpoints": [

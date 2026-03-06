@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import type { AIProviderType } from "@/types";
 
@@ -39,8 +40,10 @@ const API_KEY_PLACEHOLDERS: Record<string, string> = {
 };
 
 export function AISettingsForm() {
-  const { aiProvider, apiKey, model, textModel, setAiProvider, setApiKey, setModel, setTextModel } =
-    useSettingsStore();
+  const {
+    aiProvider, apiKey, model, textModel, includeTypesInPrompt,
+    setAiProvider, setApiKey, setModel, setTextModel, setIncludeTypesInPrompt,
+  } = useSettingsStore();
   const [advancedOpen, setAdvancedOpen] = useState(!!textModel);
 
   async function testConnection() {
@@ -214,6 +217,20 @@ export function AISettingsForm() {
                       generator only sees a text description of your screens.
                     </span>
                   </p>
+                </div>
+
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <Label>Include generated type names in prompt</Label>
+                    <p className="text-xs text-muted-foreground">
+                      When enabled, sends existing type and schema names to AI so it can reference them.
+                      Disable when rebuilding types from scratch.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={includeTypesInPrompt}
+                    onCheckedChange={setIncludeTypesInPrompt}
+                  />
                 </div>
               </div>
             )}

@@ -19,12 +19,16 @@ import { serializeJiraStory } from "@/lib/parsers/jira-parser";
 import { toast } from "sonner";
 import type { Contract } from "@/types";
 
-function buildPayload(contract: Contract, specs: ReturnType<typeof useSpecsStore.getState>["specs"]) {
+function buildPayload(
+  contract: Contract,
+  specs: ReturnType<typeof useSpecsStore.getState>["specs"],
+  includeTypesInPrompt: boolean
+) {
   const jiraStory = contract.jiraStories.length > 0
     ? contract.jiraStories.map((s) => serializeJiraStory(s)).join("\n\n---\n\n")
     : "No JIRA stories provided";
 
-  const screenDataUrls = contract.screens.slice(0, 3).map((s) => s.dataUrl);
+  const screenDataUrls = contract.screens.map((s) => s.dataUrl);
 
   const existingPatterns = Object.values(specs)
     .flatMap((spec) => spec.endpoints.slice(0, 5))
@@ -56,9 +60,34 @@ function buildPayload(contract: Contract, specs: ReturnType<typeof useSpecsStore
     })
     .join("\n\n");
 
-  const prompt = buildAnalysisPrompt(jiraStory, existingPatterns, screenContext || undefined);
+  const stackContext = contract.stack
+    ? Object.entries(contract.stack)
+        .filter(([, v]) => v)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(", ")
+    : null;
 
-  return { jiraStory, screenDataUrls, existingPatterns, screenContext, prompt };
+  const typesContext =
+    includeTypesInPrompt && contract.generatedTypes.length > 0
+      ? `Existing types: ${contract.generatedTypes.map((t) => t.name).join(", ")}`
+      : null;
+
+  const schemasContext =
+    includeTypesInPrompt && contract.generatedSchemas.length > 0
+      ? `Existing schemas: ${contract.generatedSchemas.map((s) => s.name).join(", ")}`
+      : null;
+
+  const combinedTypesContext = [typesContext, schemasContext].filter(Boolean).join("\n") || undefined;
+
+  const prompt = buildAnalysisPrompt(
+    jiraStory,
+    existingPatterns,
+    screenContext || undefined,
+    stackContext || undefined,
+    combinedTypesContext
+  );
+
+  return { jiraStory, screenDataUrls, existingPatterns, screenContext, stackContext, prompt };
 }
 
 type Step = "idle" | "describing" | "generating" | "loading" | "done";
@@ -83,11 +112,11 @@ export function AIAnalyzer() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const contract = useContractStore((s) => s.contract);
   const addEndpoints = useContractStore((s) => s.addEndpoints);
-  const { aiProvider, apiKey, model, textModel } = useSettingsStore();
+  const { aiProvider, apiKey, model, textModel, includeTypesInPrompt } = useSettingsStore();
   const specs = useSpecsStore((s) => s.specs);
 
   const loading = step === "describing" || step === "generating" || step === "loading";
-  const payload = contract ? buildPayload(contract, specs) : null;
+  const payload = contract ? buildPayload(contract, specs, includeTypesInPrompt) : null;
 
   async function analyze() {
     if (!contract || !apiKey) {
@@ -99,7 +128,7 @@ export function AIAnalyzer() {
       return;
     }
 
-    const { jiraStory, screenDataUrls, existingPatterns, screenContext } = buildPayload(contract, specs);
+    const { jiraStory, screenDataUrls, existingPatterns, screenContext } = buildPayload(contract, specs, includeTypesInPrompt);
     const primaryModel = model || (aiProvider === "claude" ? "claude-sonnet-4-6" : aiProvider === "openai" ? "gpt-4o" : "Claude-Sonnet-4.5");
 
     try {
@@ -216,7 +245,7 @@ export function AIAnalyzer() {
               {/* Images summary */}
               <div className="rounded-md border p-3 space-y-1">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Attached Images
+                  Attached Images ({payload.screenDataUrls.length})
                 </p>
                 {payload.screenDataUrls.length === 0 ? (
                   <p className="text-muted-foreground">No screens uploaded</p>
@@ -239,6 +268,16 @@ export function AIAnalyzer() {
                   </ul>
                 )}
               </div>
+
+              {/* Tech stack */}
+              {payload.stackContext && (
+                <div className="rounded-md border p-3 space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Tech Stack
+                  </p>
+                  <p className="text-xs text-foreground">{payload.stackContext}</p>
+                </div>
+              )}
 
               {/* Full prompt text */}
               <div className="rounded-md border p-3 space-y-1">
