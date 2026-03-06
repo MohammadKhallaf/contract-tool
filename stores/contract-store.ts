@@ -23,7 +23,7 @@ function migrateContract(raw: unknown): Contract {
     c.jiraStories = c.jiraStory ? [c.jiraStory] : [];
     delete c.jiraStory;
   }
-  return c as Contract;
+  return c as unknown as Contract;
 }
 
 interface ContractState {

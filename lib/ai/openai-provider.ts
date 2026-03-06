@@ -1,12 +1,30 @@
 import type { AIProvider } from "./provider";
 import type { AIAnalysisRequest, AIAnalysisResponse } from "@/types";
-import { buildAnalysisPrompt } from "./prompts";
+import { buildAnalysisPrompt, buildScreenDescriptionPrompt } from "./prompts";
 
 export class OpenAIProvider implements AIProvider {
   constructor(
     private apiKey: string,
     private model: string = "gpt-4o"
   ) {}
+
+  async describeScreens(dataUrls: string[]): Promise<string> {
+    const content: unknown[] = [
+      { type: "text", text: buildScreenDescriptionPrompt() },
+      ...dataUrls.slice(0, 3).map((url) => ({
+        type: "image_url",
+        image_url: { url, detail: "high" },
+      })),
+    ];
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
+      body: JSON.stringify({ model: this.model, messages: [{ role: "user", content }], max_tokens: 1024 }),
+    });
+    if (!res.ok) throw new Error(`OpenAI screen description error: ${await res.text()}`);
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content ?? "";
+  }
 
   async analyze(request: AIAnalysisRequest): Promise<AIAnalysisResponse> {
     const userContent: unknown[] = [

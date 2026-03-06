@@ -13,18 +13,20 @@ import {
 import { toast } from "sonner";
 import type { AIProviderType } from "@/types";
 
-const PROVIDER_MODELS: Record<string, string[]> = {
-  claude: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"],
-  openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
-  poe: [
-    "Claude-Sonnet-4.5",
-    "Claude-Opus-4.5",
-    "GPT-4o",
-    "Gemini-2.0-Flash",
-    "Llama-3.1-405B",
-    "Grok-3-Beta",
-  ],
-  manual: [],
+const PROVIDER_MODELS: Record<string, { vision: string[]; text: string[] }> = {
+  claude: {
+    vision: ["claude-sonnet-4-6", "claude-opus-4-6"],
+    text: ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"],
+  },
+  openai: {
+    vision: ["gpt-4o", "gpt-4-turbo"],
+    text: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
+  },
+  poe: {
+    vision: ["Claude-Sonnet-4.5", "Claude-Opus-4.5", "GPT-4o", "Gemini-2.0-Flash"],
+    text: ["Claude-Haiku-4.5", "Claude-Sonnet-4.5", "Gemini-2.0-Flash", "Llama-3.1-405B"],
+  },
+  manual: { vision: [], text: [] },
 };
 
 const API_KEY_PLACEHOLDERS: Record<string, string> = {
@@ -35,7 +37,7 @@ const API_KEY_PLACEHOLDERS: Record<string, string> = {
 };
 
 export function AISettingsForm() {
-  const { aiProvider, apiKey, model, setAiProvider, setApiKey, setModel } =
+  const { aiProvider, apiKey, model, textModel, setAiProvider, setApiKey, setModel, setTextModel } =
     useSettingsStore();
 
   async function testConnection() {
@@ -54,7 +56,7 @@ export function AISettingsForm() {
             "anthropic-dangerous-direct-browser-access": "true",
           },
           body: JSON.stringify({
-            model: model || "claude-haiku-4-5-20251001",
+            model: model || textModel || "claude-haiku-4-5-20251001",
             max_tokens: 10,
             messages: [{ role: "user", content: "ping" }],
           }),
@@ -88,7 +90,8 @@ export function AISettingsForm() {
     }
   }
 
-  const models = PROVIDER_MODELS[aiProvider] ?? [];
+  const visionModels = PROVIDER_MODELS[aiProvider]?.vision ?? [];
+  const textModels = PROVIDER_MODELS[aiProvider]?.text ?? [];
 
   return (
     <div className="space-y-4">
@@ -130,37 +133,54 @@ export function AISettingsForm() {
             </p>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Model</Label>
+          <div className="rounded-md border p-3 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Vision Model <span className="normal-case font-normal">(used when screens are attached)</span>
+            </p>
             <Select value={model} onValueChange={setModel}>
               <SelectTrigger>
-                <SelectValue placeholder="Select model..." />
+                <SelectValue placeholder="Select vision model..." />
               </SelectTrigger>
               <SelectContent>
-                {models.map((m) => (
-                  <SelectItem key={m} value={m}>
-                    {m}
-                  </SelectItem>
+                {visionModels.map((m) => (
+                  <SelectItem key={m} value={m}>{m}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {aiProvider === "poe" && (
-              <p className="text-xs text-muted-foreground">
-                Poe gives access to 100+ models. Enter any bot name manually if not listed.
-              </p>
-            )}
-          </div>
-
-          {aiProvider === "poe" && (
-            <div className="space-y-1.5">
-              <Label>Custom model name</Label>
               <Input
-                placeholder="e.g. Gemini-2.5-Pro or any Poe bot name"
+                placeholder="Or type any Poe bot name, e.g. Claude-Sonnet-4.5"
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
               />
-            </div>
-          )}
+            )}
+          </div>
+
+          <div className="rounded-md border p-3 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Text Model <span className="normal-case font-normal">(used when no screens — cheaper)</span>
+            </p>
+            <Select value={textModel} onValueChange={setTextModel}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select text model (falls back to vision model)..." />
+              </SelectTrigger>
+              <SelectContent>
+                {textModels.map((m) => (
+                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {aiProvider === "poe" && (
+              <Input
+                placeholder="Or type any Poe bot name, e.g. Claude-Haiku-4.5"
+                value={textModel}
+                onChange={(e) => setTextModel(e.target.value)}
+              />
+            )}
+            <p className="text-xs text-muted-foreground">
+              Recommended: Haiku (10× cheaper than Sonnet, no vision needed for text-only analysis).
+            </p>
+          </div>
 
           <Button variant="outline" onClick={testConnection}>
             Test Connection

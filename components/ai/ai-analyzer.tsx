@@ -61,14 +61,31 @@ function buildPayload(contract: Contract, specs: ReturnType<typeof useSpecsStore
   return { jiraStory, screenDataUrls, existingPatterns, screenContext, prompt };
 }
 
+type Step = "idle" | "describing" | "generating" | "done";
+
+const STEP_LABEL: Record<Step, string> = {
+  idle: "Analyze with AI",
+  describing: "Reading screens…",
+  generating: "Generating endpoints…",
+  done: "Done",
+};
+
+function makeProvider(aiProvider: string, apiKey: string, model: string) {
+  if (aiProvider === "claude") return new ClaudeProvider(apiKey, model);
+  if (aiProvider === "openai") return new OpenAIProvider(apiKey, model);
+  if (aiProvider === "poe") return new PoeProvider(apiKey, model);
+  return null;
+}
+
 export function AIAnalyzer() {
-  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<Step>("idle");
   const [previewOpen, setPreviewOpen] = useState(false);
   const contract = useContractStore((s) => s.contract);
   const addEndpoints = useContractStore((s) => s.addEndpoints);
-  const { aiProvider, apiKey, model } = useSettingsStore();
+  const { aiProvider, apiKey, model, textModel } = useSettingsStore();
   const specs = useSpecsStore((s) => s.specs);
 
+  const loading = step === "describing" || step === "generating";
   const payload = contract ? buildPayload(contract, specs) : null;
 
   async function analyze() {
@@ -76,40 +93,59 @@ export function AIAnalyzer() {
       toast.error("Configure AI provider and API key in Settings first");
       return;
     }
+    if (aiProvider === "manual") {
+      toast.error("Select an AI provider in Settings");
+      return;
+    }
 
     const { jiraStory, screenDataUrls, existingPatterns, screenContext } = buildPayload(contract, specs);
+    const visionModel = model || (aiProvider === "claude" ? "claude-sonnet-4-6" : aiProvider === "openai" ? "gpt-4o" : "Claude-Sonnet-4.5");
+    const genModel = textModel || (aiProvider === "claude" ? "claude-haiku-4-5-20251001" : aiProvider === "openai" ? "gpt-4o-mini" : "Claude-Haiku-4.5");
 
-    setLoading(true);
     try {
-      let provider;
-      if (aiProvider === "claude") {
-        provider = new ClaudeProvider(apiKey, model || "claude-sonnet-4-6");
-      } else if (aiProvider === "openai") {
-        provider = new OpenAIProvider(apiKey, model || "gpt-4o");
-      } else if (aiProvider === "poe") {
-        provider = new PoeProvider(apiKey, model || "Claude-Sonnet-4.5");
-      } else {
-        toast.error("Select an AI provider in Settings");
-        return;
+      let enrichedScreenContext = screenContext;
+
+      // Step 1: vision model describes screens (only if screens exist)
+      if (screenDataUrls.length > 0) {
+        setStep("describing");
+        const visionProvider = makeProvider(aiProvider, apiKey, visionModel);
+        if (visionProvider?.describeScreens) {
+          const description = await visionProvider.describeScreens(screenDataUrls);
+          // Merge AI screen description with manual annotation context
+          enrichedScreenContext = screenContext
+            ? `${screenContext}\n\nAI Visual Analysis:\n${description}`
+            : `AI Visual Analysis:\n${description}`;
+        }
       }
 
-      const result = await provider.analyze({
+      // Step 2: text model generates endpoints from JIRA + screen description
+      setStep("generating");
+      const genProvider = makeProvider(aiProvider, apiKey, genModel);
+      if (!genProvider) return;
+
+      const result = await genProvider.analyze({
         jiraStory,
-        screenDataUrls,
+        screenDataUrls: [], // no images — already described in text
         existingPatterns,
-        screenContext: screenContext || undefined,
+        screenContext: enrichedScreenContext || undefined,
       });
+
+      setStep("done");
 
       if (result.endpoints.length > 0) {
         addEndpoints(result.endpoints);
-        toast.success(`${result.endpoints.length} endpoint(s) added from AI analysis`);
+        toast.success(
+          screenDataUrls.length > 0
+            ? `${result.endpoints.length} endpoint(s) added (Sonnet read screens → Haiku generated)`
+            : `${result.endpoints.length} endpoint(s) added`
+        );
       } else {
         toast.warning("AI returned no endpoints. Check your API key and story.");
       }
     } catch (err) {
       toast.error(`AI analysis failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
-      setLoading(false);
+      setStep("idle");
     }
   }
 
@@ -131,11 +167,11 @@ export function AIAnalyzer() {
         onClick={analyze}
         disabled={loading || aiProvider === "manual" || !apiKey}
         variant="outline"
-        className="gap-1.5"
+        className="gap-1.5 min-w-[160px]"
         title={
           aiProvider === "manual" || !apiKey
             ? "Configure AI provider in Settings"
-            : "Analyze JIRA story and screens with AI"
+            : "Step 1: vision model reads screens → Step 2: text model generates endpoints"
         }
       >
         {loading ? (
@@ -143,7 +179,7 @@ export function AIAnalyzer() {
         ) : (
           <Sparkles className="h-4 w-4" />
         )}
-        Analyze with AI
+        {STEP_LABEL[step]}
       </Button>
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>

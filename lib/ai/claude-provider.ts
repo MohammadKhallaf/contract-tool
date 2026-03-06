@@ -1,12 +1,36 @@
 import type { AIProvider } from "./provider";
 import type { AIAnalysisRequest, AIAnalysisResponse } from "@/types";
-import { buildAnalysisPrompt } from "./prompts";
+import { buildAnalysisPrompt, buildScreenDescriptionPrompt } from "./prompts";
 
 export class ClaudeProvider implements AIProvider {
   constructor(
     private apiKey: string,
     private model: string = "claude-sonnet-4-6"
   ) {}
+
+  async describeScreens(dataUrls: string[]): Promise<string> {
+    const content: unknown[] = [
+      { type: "text", text: buildScreenDescriptionPrompt() },
+    ];
+    for (const dataUrl of dataUrls.slice(0, 3)) {
+      const [header, data] = dataUrl.split(",");
+      const mediaType = header.match(/data:([^;]+)/)?.[1] ?? "image/jpeg";
+      content.push({ type: "image", source: { type: "base64", media_type: mediaType, data } });
+    }
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": this.apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({ model: this.model, max_tokens: 1024, messages: [{ role: "user", content }] }),
+    });
+    if (!res.ok) throw new Error(`Claude screen description error: ${await res.text()}`);
+    const data2 = await res.json();
+    return data2.content?.[0]?.text ?? "";
+  }
 
   async analyze(request: AIAnalysisRequest): Promise<AIAnalysisResponse> {
     const content: unknown[] = [

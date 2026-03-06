@@ -1,3 +1,14 @@
+export function buildScreenDescriptionPrompt(): string {
+  return `You are analyzing UI screens for an API contract generator.
+For each screen image provided, describe:
+1. What UI elements are visible (forms, buttons, lists, cards, modals)
+2. What data is displayed or collected (field names, data types)
+3. What user actions are possible (submit, search, delete, navigate)
+4. Any visible API hints (URLs in network tab, loading states, error messages)
+
+Be specific about field names and data structures. Output plain text, one section per screen.`;
+}
+
 export function buildAnalysisPrompt(
   jiraStory: string,
   existingPatterns: string,

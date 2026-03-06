@@ -15,11 +15,13 @@ const SPEC_URLS = [
 interface SettingsState {
   aiProvider: AIProviderType;
   apiKey: string;
-  model: string;
+  model: string;       // vision model — used when screens are attached
+  textModel: string;   // text-only model — used when no screens (cheaper)
   specUrls: string[];
   setAiProvider: (provider: AIProviderType) => void;
   setApiKey: (key: string) => void;
   setModel: (model: string) => void;
+  setTextModel: (model: string) => void;
   addSpecUrl: (url: string) => void;
   removeSpecUrl: (url: string) => void;
   resetSpecUrls: () => void;
@@ -31,10 +33,12 @@ export const useSettingsStore = create<SettingsState>()(
       aiProvider: "manual",
       apiKey: "",
       model: "",
+      textModel: "",
       specUrls: SPEC_URLS,
       setAiProvider: (provider) => set({ aiProvider: provider }),
       setApiKey: (key) => set({ apiKey: key }),
       setModel: (model) => set({ model }),
+      setTextModel: (textModel) => set({ textModel }),
       addSpecUrl: (url) =>
         set((state) => ({ specUrls: [...state.specUrls, url] })),
       removeSpecUrl: (url) =>

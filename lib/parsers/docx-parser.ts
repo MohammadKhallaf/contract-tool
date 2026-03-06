@@ -75,7 +75,7 @@ async function inflateRaw(compressed: Uint8Array): Promise<Uint8Array> {
   const ds = new DecompressionStream("deflate-raw");
   const writer = ds.writable.getWriter();
   const reader = ds.readable.getReader();
-  writer.write(compressed);
+  writer.write(compressed.slice());   // .slice() produces Uint8Array<ArrayBuffer>
   writer.close();
 
   const chunks: Uint8Array[] = [];
