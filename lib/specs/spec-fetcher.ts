@@ -1,4 +1,5 @@
 import { proxySpecUrl, projectFromUrl, SPEC_TTL_MS } from "@/lib/constants";
+import { SPEC_URLS } from "@/stores/settings-store";
 import type { ParsedSpec } from "@/types";
 import { parseSpec } from "./spec-parser";
 
@@ -10,9 +11,17 @@ export function getSpecStatus(spec: ParsedSpec | undefined): FetchStatus {
   return age > SPEC_TTL_MS ? "stale" : "cached";
 }
 
+export function isBuiltinUrl(url: string): boolean {
+  return (SPEC_URLS as readonly string[]).includes(url);
+}
+
 export async function fetchSpec(url: string): Promise<ParsedSpec> {
   const project = projectFromUrl(url);
-  const proxyUrl = proxySpecUrl(project);
+
+  // Built-in URLs use the dedicated proxy rewrite; user-added URLs use the generic proxy
+  const proxyUrl = isBuiltinUrl(url)
+    ? proxySpecUrl(project)
+    : `/api/proxy-fetch?url=${encodeURIComponent(url)}`;
 
   const res = await fetch(proxyUrl);
   if (!res.ok) {

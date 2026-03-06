@@ -58,7 +58,7 @@ export function extractPatterns(specs: ParsedSpec[]): PatternItem[] {
 
   // --- pagination ---
   const paginationProjects = new Set<string>();
-  const paginationKeys = ["data", "total", "page", "pagesize", "page_size", "hasnextpage", "has_next_page", "items", "results", "count"];
+  const paginationKeys = ["data", "total", "offset", "itemsperpage", "items_per_page", "page", "pagesize", "page_size", "hasnextpage", "has_next_page", "items", "results", "count"];
   for (const spec of specs) {
     for (const schema of spec.schemas) {
       const keys = Object.keys(schema.properties).map((k) => k.toLowerCase());
@@ -90,7 +90,7 @@ export function extractPatterns(specs: ParsedSpec[]): PatternItem[] {
       kind: "pagination",
       label: "Pagination envelope",
       description: `Pagination response shape detected in ${paginationProjects.size} project(s).`,
-      promptSnippet: `Pagination: Endpoints that return lists must use this response envelope: { data: T[], total: number, page: number, pageSize: number, hasNextPage: boolean }`,
+      promptSnippet: `Pagination: Endpoints that return lists must use this response envelope: { data: T[], total: number, offset: number, itemsPerPage: number }`,
       weight: 1.0,
       enabled: true,
       sourceProjects: [...paginationProjects],

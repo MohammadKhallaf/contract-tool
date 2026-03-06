@@ -1,3 +1,32 @@
+export function buildSpecAnalysisPrompt(specSummary: string): string {
+  return `You are analyzing an OpenAPI/Swagger spec to extract its conventions for use in an API contract tool.
+
+Spec summary:
+${specSummary}
+
+Analyze the spec and respond ONLY with valid JSON in this exact shape:
+{
+  "paginationShape": {
+    "found": true,
+    "fields": ["data", "total", "offset", "itemsPerPage"],
+    "description": "Human-readable description of the pagination envelope"
+  },
+  "errorShape": {
+    "found": true,
+    "fields": ["message", "code"],
+    "description": "Human-readable description of the error response shape"
+  },
+  "namingConventions": {
+    "pathPrefix": "/api",
+    "paramStyle": "camelCase",
+    "notes": "Any notable naming conventions"
+  },
+  "summary": "1-2 sentence summary of this API's conventions"
+}
+
+If pagination or error shapes are not detected, set found: false and leave fields as [].`;
+}
+
 export function buildScreenDescriptionPrompt(): string {
   return `You are analyzing UI screens for an API contract generator.
 For each screen image provided, describe:
