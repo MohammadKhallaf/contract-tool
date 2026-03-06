@@ -27,12 +27,15 @@ interface ContractState {
   // screens
   addScreen: (screen: Omit<Screen, "id" | "annotationIds">) => string;
   removeScreen: (id: string) => void;
+  updateScreen: (id: string, changes: Partial<Screen>) => void;
+  reorderScreens: (ids: string[]) => void;
   // annotations
   addAnnotation: (
     ann: Omit<Annotation, "id" | "number">
   ) => string;
   moveAnnotation: (id: string, x: number, y: number) => void;
   linkAnnotation: (annotationId: string, endpointId: string | undefined) => void;
+  updateAnnotation: (id: string, changes: Partial<Annotation>) => void;
   removeAnnotation: (id: string) => void;
   // endpoints
   addEndpoint: (
@@ -117,6 +120,35 @@ export const useContractStore = create<ContractState>()(
             : s
         ),
 
+      updateScreen: (id, changes) =>
+        set((s) =>
+          s.contract
+            ? {
+                contract: {
+                  ...s.contract,
+                  screens: s.contract.screens.map((sc) =>
+                    sc.id === id ? { ...sc, ...changes } : sc
+                  ),
+                  updatedAt: new Date().toISOString(),
+                },
+              }
+            : s
+        ),
+
+      reorderScreens: (ids) =>
+        set((s) => {
+          if (!s.contract) return s;
+          const map = new Map(s.contract.screens.map((sc) => [sc.id, sc]));
+          const reordered = ids.map((id) => map.get(id)).filter(Boolean) as typeof s.contract.screens;
+          return {
+            contract: {
+              ...s.contract,
+              screens: reordered,
+              updatedAt: new Date().toISOString(),
+            },
+          };
+        }),
+
       addAnnotation: (ann) => {
         const id = makeId();
         const { contract } = get();
@@ -168,6 +200,21 @@ export const useContractStore = create<ContractState>()(
                   ...s.contract,
                   annotations: s.contract.annotations.map((a) =>
                     a.id === annotationId ? { ...a, endpointId } : a
+                  ),
+                  updatedAt: new Date().toISOString(),
+                },
+              }
+            : s
+        ),
+
+      updateAnnotation: (id, changes) =>
+        set((s) =>
+          s.contract
+            ? {
+                contract: {
+                  ...s.contract,
+                  annotations: s.contract.annotations.map((a) =>
+                    a.id === id ? { ...a, ...changes } : a
                   ),
                   updatedAt: new Date().toISOString(),
                 },

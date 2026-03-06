@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { MessageSquare } from "lucide-react";
 import type { Annotation } from "@/types";
 
 interface Props {
@@ -58,22 +59,31 @@ export function AnnotationMarker({
 
   return (
     <div
-      className={cn(
-        "absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold cursor-grab select-none border-2 transition-all z-10",
-        annotation.endpointId
-          ? "bg-green-500 border-green-600 text-white"
-          : "bg-blue-500 border-blue-600 text-white",
-        isHighlighted && "ring-4 ring-orange-400 ring-offset-1 scale-125"
-      )}
+      className="absolute -translate-x-1/2 -translate-y-1/2 z-10"
       style={{ left: `${annotation.x}%`, top: `${annotation.y}%` }}
-      onMouseDown={onMouseDown}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick(annotation.id, annotation.endpointId);
-      }}
-      title={`Marker ${annotation.number}${annotation.endpointId ? " (linked)" : " (unlinked)"}`}
     >
-      {annotation.number}
+      <div
+        className={cn(
+          "flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold cursor-grab select-none border-2 transition-all",
+          annotation.endpointId
+            ? "bg-green-500 border-green-600 text-white"
+            : "bg-blue-500 border-blue-600 text-white",
+          isHighlighted && "ring-4 ring-orange-400 ring-offset-1 scale-125"
+        )}
+        onMouseDown={onMouseDown}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick(annotation.id, annotation.endpointId);
+        }}
+        title={`Marker ${annotation.number}${annotation.endpointId ? " (linked)" : " (unlinked)"}${annotation.comment ? `: ${annotation.comment}` : ""}`}
+      >
+        {annotation.number}
+      </div>
+      {annotation.comment && (
+        <div className="absolute -top-1 -right-1 pointer-events-none">
+          <MessageSquare className="h-2.5 w-2.5 text-amber-400 fill-amber-400" />
+        </div>
+      )}
     </div>
   );
 }

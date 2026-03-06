@@ -11,6 +11,7 @@ export interface AIAnalysisRequest {
   jiraStory: string;
   screenDataUrls?: string[];
   existingPatterns?: string;
+  screenContext?: string;
 }
 
 export interface AIAnalysisResponse {

@@ -17,6 +17,7 @@ import { TypeList } from "@/components/types-editor/type-list";
 import { SchemaList } from "@/components/schemas/schema-list";
 import { ExportPanel } from "@/components/export/export-panel";
 import { AIAnalyzer } from "@/components/ai/ai-analyzer";
+import { ErdView } from "@/components/erd/erd-view";
 import { Save, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useContractSave } from "@/hooks/use-contract";
@@ -114,7 +115,7 @@ export default function ContractPage() {
           value={activePanel}
           onValueChange={(v) => setActivePanel(v as typeof activePanel)}
         >
-          <TabsList className="grid grid-cols-6 w-full mb-4">
+          <TabsList className="grid grid-cols-7 w-full mb-4">
             <TabsTrigger value="jira">JIRA</TabsTrigger>
             <TabsTrigger value="screens">
               Screens
@@ -134,6 +135,7 @@ export default function ContractPage() {
             </TabsTrigger>
             <TabsTrigger value="types">Types</TabsTrigger>
             <TabsTrigger value="schemas">Schemas</TabsTrigger>
+            <TabsTrigger value="erd">ERD</TabsTrigger>
             <TabsTrigger value="export">Export</TabsTrigger>
           </TabsList>
 
@@ -163,6 +165,10 @@ export default function ContractPage() {
 
           <TabsContent value="schemas">
             <SchemaList />
+          </TabsContent>
+
+          <TabsContent value="erd" className="h-[75vh]">
+            <ErdView />
           </TabsContent>
 
           <TabsContent value="export">

@@ -14,7 +14,8 @@ export class PoeProvider implements AIProvider {
         type: "text",
         text: buildAnalysisPrompt(
           request.jiraStory,
-          request.existingPatterns ?? ""
+          request.existingPatterns ?? "",
+          request.screenContext
         ),
       },
     ];

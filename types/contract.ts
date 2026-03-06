@@ -49,6 +49,10 @@ export interface Annotation {
   number: number;
   endpointId?: string;
   label?: string;
+  comment?: string;          // longer comment / context
+  kind?: "point" | "rect";  // defaults to "point" when absent
+  width?: number;            // percentage 0-100 (rect only)
+  height?: number;           // percentage 0-100 (rect only)
 }
 
 export interface Screen {
@@ -56,6 +60,7 @@ export interface Screen {
   name: string;
   dataUrl: string; // compressed base64
   annotationIds: string[];
+  notes?: string;  // per-screen freetext context for AI
 }
 
 export interface GeneratedType {

@@ -1,6 +1,7 @@
 "use client";
-import { Download } from "lucide-react";
+import { Download, ExternalLink } from "lucide-react";
 import dynamic from "next/dynamic";
+import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -25,6 +26,8 @@ function downloadFile(content: string, filename: string, mimeType: string) {
 
 export function ExportPanel() {
   const contract = useContractStore((s) => s.contract);
+  const router = useRouter();
+  const { id } = useParams<{ id: string }>();
 
   if (!contract) return null;
 
@@ -112,6 +115,14 @@ export function ExportPanel() {
           </Button>
           <Button variant="outline" size="sm" onClick={downloadSwaggerJson} className="gap-1.5">
             <Download className="h-3.5 w-3.5" /> Swagger 2.0 JSON
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push(`/contract/${id}/swagger`)}
+            className="gap-1.5"
+          >
+            <ExternalLink className="h-3.5 w-3.5" /> View Swagger UI
           </Button>
         </div>
       </div>
